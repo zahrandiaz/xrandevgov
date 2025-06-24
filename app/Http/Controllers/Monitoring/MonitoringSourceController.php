@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Monitoring;
 
 use App\Http\Controllers\Controller;
 use App\Models\MonitoringSource;
+use App\Models\SelectorPreset;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
@@ -26,9 +27,10 @@ class MonitoringSourceController extends Controller
     /**
      * Show the form for creating a new monitoring source.
      */
-    public function create() // Tambah metode ini
+    public function create() // Modifikasi metode ini
     {
-        return view('sources.create'); // View untuk form tambah situs
+        $presets = SelectorPreset::all(); // Ambil semua preset
+        return view('sources.create', compact('presets')); // Teruskan ke view
     }
 
     /**
@@ -64,9 +66,10 @@ class MonitoringSourceController extends Controller
     /**
      * Show the form for editing the specified monitoring source.
      */
-    public function edit(MonitoringSource $source) // Tambah metode ini
+    public function edit(MonitoringSource $source) // Modifikasi metode ini
     {
-        return view('sources.edit', compact('source')); // View untuk form edit situs
+        $presets = SelectorPreset::all(); // Ambil semua preset
+        return view('sources.edit', compact('source', 'presets')); // Teruskan ke view
     }
 
     /**
@@ -114,6 +117,145 @@ class MonitoringSourceController extends Controller
         $source->delete();
         return redirect()->route('monitoring.sources.index')
                          ->with('success', 'Situs monitoring berhasil dihapus!');
+    }
+
+    /**
+     * Test given selectors against a URL and return sample articles.
+     * This method is used by the frontend to validate selectors in real-time.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function testSelector(Request $request)
+    {
+        $validatedData = $request->validate([
+            'url' => 'required|url:http,https|ends_with:.go.id',
+            'crawl_url' => 'nullable|string',
+            'selector_title' => 'required|string',
+            'selector_date' => 'nullable|string',
+            'selector_link' => 'nullable|string',
+        ]);
+
+        $url = $validatedData['url'];
+        $crawlUrlPath = $validatedData['crawl_url'] ?? '/';
+        $titleSelector = $validatedData['selector_title'];
+        $dateSelector = $validatedData['selector_date'];
+        $linkSelector = $validatedData['selector_link'];
+
+        // Pastikan URL utama memiliki skema
+        if (!preg_match("~^(?:f|ht)tps?://~i", $url)) {
+            $url = "https://" . $url;
+        }
+
+        $fullCrawlUrl = rtrim($url, '/') . '/' . ltrim($crawlUrlPath, '/');
+
+        $httpClient = HttpClient::create(['verify_peer' => false, 'verify_host' => false]);
+        $client = new HttpBrowser($httpClient);
+
+        $sampleArticles = [];
+        $errorMessage = '';
+
+        try {
+            $crawler = $client->request('GET', $fullCrawlUrl);
+
+            // Cek apakah ada elemen yang cocok dengan selector judul utama
+            if ($crawler->filter($titleSelector)->count() === 0) {
+                $errorMessage = "Selector Judul tidak menemukan hasil di halaman ini.";
+            } else {
+                $crawler->filter($titleSelector)->each(function ($node) use (&$sampleArticles, $url, $dateSelector, $linkSelector) {
+                    if (count($sampleArticles) >= 3) { // Batasi hanya 3 sampel untuk efisiensi
+                        return;
+                    }
+
+                    $title = trim($node->text());
+                    $link = null;
+                    $date = 'Tanggal Tidak Ditemukan';
+
+                    // Logika pengambilan link (disesuaikan dari metode crawl)
+                    if (!empty($linkSelector) && $node->filter($linkSelector)->count() > 0) {
+                        $firstLinkNodeCrawler = $node->filter($linkSelector)->first();
+                        $domElement = $firstLinkNodeCrawler->getNode(0);
+
+                        if ($domElement instanceof \DOMElement && $domElement->hasAttribute('href')) {
+                            $link = $domElement->getAttribute('href');
+                        } else {
+                            $linkObject = $firstLinkNodeCrawler->link();
+                            if ($linkObject) {
+                                $link = $linkObject->getUri();
+                            }
+                        }
+                    } elseif ($node->getNode(0) instanceof \DOMElement && $node->getNode(0)->nodeName === 'a' && $node->getNode(0)->hasAttribute('href')) {
+                        $link = $node->getNode(0)->getAttribute('href');
+                    } else {
+                        // Coba cari link di elemen terdekat jika tidak ada di selector_link atau node judul itu sendiri
+                        $readMoreNode = $node->closest('div, p, article, li')->filter('a[href*="berita"], a[href*="artikel"], a[href*="read"], a.btn-primary')->first();
+                        if ($readMoreNode->count() > 0) {
+                            $readMoreDomElement = $readMoreNode->getNode(0);
+                            if ($readMoreDomElement instanceof \DOMElement && $readMoreDomElement->hasAttribute('href')) {
+                                $link = $readMoreDomElement->getAttribute('href');
+                            }
+                        }
+                    }
+
+                    // Logika pengambilan tanggal (disesuaikan dari metode crawl)
+                    $dateCandidateNode = null;
+                    if (!empty($dateSelector) && $node->filter($dateSelector)->count() > 0) {
+                        $dateCandidateNode = $node->filter($dateSelector)->first();
+                    } else {
+                        $dateCandidateNode = $node->closest('li, div, article, p, span')->filter($dateSelector)->first();
+                    }
+
+                    if ($dateCandidateNode && $dateCandidateNode->count() > 0) {
+                        $dateDomElement = $dateCandidateNode->getNode(0);
+                        if ($dateDomElement instanceof \DOMElement) {
+                            $dateText = trim($dateDomElement->textContent);
+                            $parsedDate = strtotime($dateText);
+                            if ($parsedDate !== false) {
+                                $date = date('Y-m-d', $parsedDate);
+                            } else {
+                                if ($dateDomElement->hasAttribute('datetime')) {
+                                    $date = date('Y-m-d', strtotime($dateDomElement->getAttribute('datetime')));
+                                }
+                            }
+                        }
+                    }
+
+                    // Pastikan link absolut
+                    if ($link && strpos($link, 'http') !== 0) {
+                        $link = rtrim($url, '/') . '/' . ltrim($link, '/');
+                    }
+
+                    // Verifikasi bahwa link berasal dari domain yang sama atau subdomain
+                    $parsedSourceUrl = parse_url($url, PHP_URL_HOST);
+                    $parsedArticleLinkHost = $link ? parse_url($link, PHP_URL_HOST) : null;
+
+                    if (filter_var($link, FILTER_VALIDATE_URL) && $title && $parsedSourceUrl === $parsedArticleLinkHost) {
+                        $sampleArticles[] = [
+                            'title' => $title,
+                            'link' => $link,
+                            'date' => $date,
+                        ];
+                    }
+                });
+            }
+
+            if (empty($sampleArticles) && empty($errorMessage)) {
+                $errorMessage = "Tidak ada artikel yang ditemukan dengan kombinasi selector yang diberikan. Pastikan selector dan URL sudah benar.";
+            }
+
+        } catch (\GuzzleHttp\Exception\ConnectException $e) {
+            Log::error("Could not connect to " . $fullCrawlUrl . ": " . $e->getMessage());
+            $errorMessage = "Gagal terhubung ke URL. Pastikan URL benar dan situs aktif. Error: " . $e->getMessage();
+        } catch (\Exception $e) {
+            Log::error("Error testing selector on " . $fullCrawlUrl . ": " . $e->getMessage());
+            $errorMessage = "Terjadi kesalahan saat menguji selector. Error: " . $e->getMessage();
+        }
+
+        if (!empty($errorMessage)) {
+            return response()->json(['success' => false, 'message' => $errorMessage], 400); // 400 Bad Request untuk error validasi/logic
+        } else {
+            return response()->json(['success' => true, 'articles' => $sampleArticles]);
+        }
     }
 
     /**

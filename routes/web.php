@@ -50,4 +50,7 @@ Route::middleware('access.code')->group(function () {
 
     // Rute untuk menjalankan proses crawling
     Route::post('/monitoring/sources/crawl', [MonitoringSourceController::class, 'crawl'])->name('monitoring.sources.crawl');
+
+    // [BARU] Rute untuk menguji selector secara real-time
+    Route::post('/monitoring/sources/test-selector', [MonitoringSourceController::class, 'testSelector'])->name('monitoring.sources.testSelector');
 });
