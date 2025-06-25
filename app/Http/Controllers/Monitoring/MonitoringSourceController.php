@@ -408,25 +408,29 @@ class MonitoringSourceController extends Controller
 
     public function showDashboard()
     {
-        // Total jumlah situs monitoring
+        // --- Statistik Situs & Artikel (YANG SUDAH ADA) ---
         $totalSources = MonitoringSource::count();
-        // Jumlah situs aktif
         $activeSources = MonitoringSource::where('is_active', true)->count();
-        // Jumlah situs nonaktif
         $inactiveSources = $totalSources - $activeSources;
-
-        // Total artikel yang di-crawl
         $totalArticles = CrawledArticle::count();
-
-        // Jumlah artikel baru hari ini (diasumsikan 'crawled_at' hari ini)
         $newArticlesToday = CrawledArticle::whereDate('crawled_at', Carbon::today())->count();
-        // Jumlah artikel baru 7 hari terakhir
         $newArticlesLast7Days = CrawledArticle::where('crawled_at', '>=', Carbon::now()->subDays(7))->count();
-
-        // Data terakhir crawling per situs (opsional, bisa ditampilkan di dashboard atau halaman lain)
-        // Ambil beberapa situs terakhir yang di-crawl untuk ringkasan
         $latestCrawls = MonitoringSource::orderBy('last_crawled_at', 'desc')->take(5)->get();
 
+        // --- [ANALITIK BARU] Statistik Kesehatan Crawl ---
+        // Hitung hanya untuk situs yang aktif dan pernah di-crawl
+        $activeCrawledSources = MonitoringSource::where('is_active', true)->whereNotNull('last_crawl_status');
+        
+        $totalCrawled = $activeCrawledSources->count();
+        $successfulCrawls = $activeCrawledSources->clone()->where('last_crawl_status', 'success')->count();
+        
+        // Hitung persentase, hindari pembagian dengan nol
+        $crawlSuccessRate = ($totalCrawled > 0) ? round(($successfulCrawls / $totalCrawled) * 100) : 100;
+
+        // Ambil daftar situs yang bermasalah (gagal 3 kali atau lebih berturut-turut)
+        $problematicSources = MonitoringSource::where('consecutive_failures', '>=', 3)
+                                              ->orderBy('consecutive_failures', 'desc')
+                                              ->get();
 
         return view('dashboard', compact(
             'totalSources',
@@ -435,7 +439,9 @@ class MonitoringSourceController extends Controller
             'totalArticles',
             'newArticlesToday',
             'newArticlesLast7Days',
-            'latestCrawls'
+            'latestCrawls',
+            'crawlSuccessRate',      // [BARU] Teruskan data ini
+            'problematicSources' // [BARU] Teruskan data ini
         ));
     }
 }

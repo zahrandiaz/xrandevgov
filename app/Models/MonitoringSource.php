@@ -20,6 +20,8 @@ class MonitoringSource extends Model
         'selector_link',
         'last_crawled_at',
         'is_active',
+        'last_crawl_status',    // [BARU] Tambahkan ini
+        'consecutive_failures', // [BARU] Tambahkan ini
     ];
 
     protected $casts = [

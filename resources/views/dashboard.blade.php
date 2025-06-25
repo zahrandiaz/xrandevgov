@@ -12,6 +12,12 @@
             <p class="text-lg text-gray-700 mb-8">Anda berhasil masuk dengan kode akses.</p>
 
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+                {{-- [BARU] Kartu Statistik Kesehatan Crawl --}}
+                <div class="bg-teal-100 p-4 rounded-lg shadow-md text-center">
+                    <p class="text-gray-600 text-sm">Tingkat Sukses Crawl</p>
+                    <p class="text-3xl font-bold text-teal-800">{{ $crawlSuccessRate }}%</p>
+                </div>
+
                 <div class="bg-blue-100 p-4 rounded-lg shadow-md text-center">
                     <p class="text-gray-600 text-sm">Total Situs Monitoring</p>
                     <p class="text-3xl font-bold text-blue-800">{{ $totalSources }}</p>
@@ -36,6 +42,8 @@
                     <p class="text-gray-600 text-sm">Artikel Baru 7 Hari Terakhir</p>
                     <p class="text-3xl font-bold text-gray-800">{{ $newArticlesLast7Days }}</p>
                 </div>
+
+                
             </div>
 
             <div class="mt-6 flex flex-wrap justify-center gap-4">
@@ -65,6 +73,29 @@
                             </li>
                         @endforeach
                     </ul>
+                </div>
+            @endif
+
+
+
+            {{-- [BARU] Daftar Situs Bermasalah --}}
+            @if($problematicSources->isNotEmpty())
+                <div class="mt-8 pt-6 border-t border-gray-200 text-left">
+                    <h3 class="text-lg font-semibold text-red-800 mb-3">Situs Bermasalah (Gagal >= 3x)</h3>
+                    <div class="bg-red-50 border-l-4 border-red-400 p-4">
+                        <p class="text-sm text-red-700">Situs berikut mengalami kegagalan *crawling* beberapa kali berturut-turut. Kemungkinan *selector*-nya perlu diperbarui.</p>
+                        <ul class="text-sm text-gray-700 space-y-2 mt-3">
+                            @foreach($problematicSources as $source)
+                                <li class="flex justify-between items-center bg-white p-3 rounded-md shadow-sm">
+                                    <div>
+                                        <a href="{{ route('monitoring.sources.edit', $source) }}" class="font-semibold text-indigo-600 hover:underline">{{ $source->name }}</a>
+                                        <span class="text-xs text-gray-500 block">{{ $source->url }}</span>
+                                    </div>
+                                    <span class="text-red-600 font-bold">{{ $source->consecutive_failures }}x Gagal</span>
+                                </li>
+                            @endforeach
+                        </ul>
+                    </div>
                 </div>
             @endif
         </div>
