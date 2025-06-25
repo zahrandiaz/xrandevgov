@@ -5,151 +5,115 @@
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <title>Xrandev - Government Monitoring</title>
         <script src="https://cdn.tailwindcss.com"></script>
+        {{-- [BARU] Tambahkan Alpine.js untuk interaktivitas --}}
+        <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
     </head>
     <body class="antialiased bg-gray-100 min-h-screen">
         <div class="max-w-7xl mx-auto py-12 px-4 sm:px-6 lg:px-8">
             <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg p-6">
-                <h2 class="text-2xl font-semibold text-gray-800 leading-tight mb-6">
-                    {{ __('Government Monitoring Module') }}
-                </h2>
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-2xl font-semibold text-gray-800 leading-tight">
+                        {{ __('Manajemen Situs Monitoring') }}
+                    </h2>
+                    <div class="flex items-center space-x-4">
+                        <form method="POST" action="{{ route('monitoring.sources.crawl') }}" id="crawlForm">
+                            @csrf
+                            <button type="submit" id="crawlButton" class="bg-purple-600 text-white py-2 px-4 rounded-md hover:bg-purple-700 focus:outline-none focus:ring focus:border-purple-300">
+                                Ambil Berita Terbaru
+                            </button>
+                        </form>
+                        <a href="{{ route('monitoring.sources.create') }}" class="bg-blue-500 text-white py-2 px-4 rounded-md hover:bg-blue-600 focus:outline-none focus:ring focus:border-blue-300">
+                            Tambah Situs Baru
+                        </a>
+                    </div>
+                </div>
 
                 @if (session('success'))
                     <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded relative mb-4" role="alert">
                         <span class="block sm:inline">{{ session('success') }}</span>
                     </div>
                 @endif
-
-                @if ($errors->any())
-                    <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert">
-                        <strong class="font-bold">Oops!</strong>
-                        <span class="block sm:inline">Ada beberapa masalah:</span>
-                        <ul class="mt-3 list-disc list-inside text-sm">
-                            @foreach ($errors->all() as $error)
-                                <li>{{ $error }}</li>
-                            @endforeach
-                        </ul>
+                @if (session('info'))
+                    <div class="bg-blue-100 border border-blue-400 text-blue-700 px-4 py-3 rounded relative mb-4" role="alert">
+                        <span class="block sm:inline">{{ session('info') }}</span>
                     </div>
                 @endif
 
-                <div class="flex justify-end mb-6">
-                    <a href="{{ route('monitoring.sources.create') }}" class="bg-blue-500 text-white py-2 px-4 rounded-md hover:bg-blue-600 focus:outline-none focus:ring focus:border-blue-300">
-                        Tambah Situs Baru
-                    </a>
-                </div>
-
-                <h3 class="text-lg font-medium text-gray-900 mb-4">Daftar Situs Monitoring Aktif (.go.id)</h3>
-                @if ($sources->isEmpty())
-                    <p class="text-gray-600">Belum ada situs yang ditambahkan. Silakan tambah situs baru.</p>
-                @else
-                    <div class="overflow-x-auto shadow-md sm:rounded-lg">
-                        <table class="min-w-full divide-y divide-gray-200">
-                            <thead class="bg-gray-50">
-                                <tr>
-                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nama</th>
-                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Wilayah</th>
-                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">URL Utama</th>
-                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">URL Crawl</th>
-                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Selector Judul (Sebagian)</th>
-                                    <th scope="col" class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                                    <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Aksi</th>
-                                </tr>
-                            </thead>
-                            <tbody class="bg-white divide-y divide-gray-200">
-                                @foreach($sources as $source)
-                                    <tr>
-                                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{{ $source->name }}</td>
-                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ $source->region->name ?? 'N/A' }}</td>
-                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500"><a href="{{ $source->url }}" target="_blank" class="text-blue-500 hover:underline">{{ $source->url }}</a></td>
-                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ $source->crawl_url }}</td>
-                                        <td class="px-6 py-4 text-sm text-gray-500 truncate max-w-xs">{{ Str::limit($source->selector_title, 30) }}</td>
-                                        <td class="px-6 py-4 whitespace-nowrap text-center text-sm">
-                                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full {{ $source->is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800' }}">
-                                                {{ $source->is_active ? 'Aktif' : 'Nonaktif' }}
-                                            </span>
-                                        </td>
-                                        <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                                            <a href="{{ route('monitoring.sources.edit', $source) }}" class="text-indigo-600 hover:text-indigo-900 mr-3">Edit</a>
-                                            <form action="{{ route('monitoring.sources.destroy', $source) }}" method="POST" class="inline-block">
-                                                @csrf
-                                                @method('DELETE')
-                                                <button type="submit" onclick="return confirm('Apakah Anda yakin ingin menghapus situs {{ $source->name }}?')"
-                                                        class="text-red-600 hover:text-red-900">Hapus</button>
-                                            </form>
-                                        </td>
-                                    </tr>
-                                @endforeach
-                            </tbody>
-                        </table>
+                {{-- [BARU] Bagian untuk Situs Tanpa Wilayah --}}
+                @if($uncategorizedSources->isNotEmpty())
+                <div class="mb-6">
+                    <div class="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 rounded-md" role="alert">
+                        <p class="font-bold">Situs Tanpa Wilayah</p>
+                        <p>Ditemukan {{ $uncategorizedSources->count() }} situs yang belum memiliki wilayah. Silakan klik "Edit" untuk menetapkan wilayah yang benar.</p>
                     </div>
+                    <div class="mt-2 space-y-2">
+                        @foreach($uncategorizedSources as $source)
+                        <div class="flex items-center justify-between p-3 bg-gray-50 rounded-md border">
+                            <div class="flex items-center space-x-3">
+                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full {{ $source->is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800' }}">
+                                    {{ $source->is_active ? 'Aktif' : 'Nonaktif' }}
+                                </span>
+                                <div>
+                                    <p class="text-sm font-medium text-gray-900">{{ $source->name }}</p>
+                                    <p class="text-xs text-red-500">Wilayah belum diatur</p>
+                                </div>
+                            </div>
+                            <div class="text-sm">
+                                <a href="{{ route('monitoring.sources.edit', $source) }}" class="text-indigo-600 hover:text-indigo-900">Edit</a>
+                            </div>
+                        </div>
+                        @endforeach
+                    </div>
+                </div>
                 @endif
 
-                <div class="mt-8 pt-4 border-t border-gray-200">
-                    <form method="POST" action="{{ route('monitoring.sources.crawl') }}" id="crawlForm">
-                        @csrf
-                        <button type="submit" id="crawlButton" class="bg-purple-600 text-white py-2 px-4 rounded-md hover:bg-purple-700 focus:outline-none focus:ring focus:border-blue-300">
-                            Ambil Berita Terbaru
-                        </button>
-                        <div id="loadingIndicator" class="mt-2 text-gray-700 hidden flex items-center">
-                            <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-purple-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                            </svg>
-                            <span>Sedang mengambil berita, harap tunggu...</span>
-                        </div>
-                    </form>
-                </div>
+                {{-- [DESAIN ULANG] Mulai dari sini, kita ganti tabel dengan Accordion --}}
+                <div class="space-y-2">
+                    @forelse($provinces as $province)
+                        <div x-data="{ open: false }" class="bg-white border border-gray-200 rounded-lg">
+                            {{-- Header Provinsi (Bisa di-klik) --}}
+                            <div @click="open = !open" class="p-4 flex justify-between items-center cursor-pointer hover:bg-gray-50">
+                                <h3 class="text-lg font-medium text-gray-900">{{ $province->name }}</h3>
+                                <svg x-show="!open" class="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                                <svg x-show="open" class="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path></svg>
+                            </div>
 
-                <div id="crawled-results" class="mt-8">
-                    @if (isset($articles) && !empty($articles))
-                        <h4 class="text-md font-medium text-gray-800 mb-3">Hasil Berita Terbaru:</h4>
-                        <div class="overflow-x-auto">
-                            <table class="min-w-full divide-y divide-gray-200 shadow-md rounded-lg">
-                                <thead class="bg-gray-50">
-                                    <tr>
-                                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Judul</th>
-                                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tanggal</th>
-                                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sumber</th>
-                                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Link</th>
-                                    </tr>
-                                </thead>
-                                <tbody class="bg-white divide-y divide-gray-200">
-                                    @foreach($articles as $article)
-                                        <tr>
-                                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{{ $article['title'] }}</td>
-                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ $article['date'] }}</td>
-                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ $article['source'] }}</td>
-                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-blue-500 hover:underline"><a href="{{ $article['link'] }}" target="_blank">Lihat</a></td>
-                                        </tr>
-                                    @endforeach
-                                </tbody>
-                            </table>
+                            {{-- Daftar Situs di dalam Provinsi (Muncul/Sembunyi) --}}
+                            <div x-show="open" class="border-t border-gray-200 p-4 space-y-3">
+                                @forelse($province->children as $kabkota)
+                                    @if($kabkota->monitoringSources->isNotEmpty())
+                                        @foreach($kabkota->monitoringSources as $source)
+                                        <div class="flex items-center justify-between p-3 bg-gray-50 rounded-md">
+                                            <div class="flex items-center space-x-3">
+                                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full {{ $source->is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800' }}">
+                                                    {{ $source->is_active ? 'Aktif' : 'Nonaktif' }}
+                                                </span>
+                                                <div>
+                                                    <p class="text-sm font-medium text-gray-900">{{ $source->name }}</p>
+                                                    <p class="text-xs text-gray-500">{{ $source->region->name ?? 'N/A' }}</p>
+                                                </div>
+                                            </div>
+                                            <div class="text-sm">
+                                                <a href="{{ route('monitoring.sources.edit', $source) }}" class="text-indigo-600 hover:text-indigo-900">Edit</a>
+                                            </div>
+                                        </div>
+                                        @endforeach
+                                    @endif
+                                @empty
+                                    <p class="text-sm text-gray-500 px-3">Belum ada Kabupaten/Kota yang memiliki situs monitoring di provinsi ini.</p>
+                                @endforelse
+                            </div>
                         </div>
-                    @elseif (isset($articles) && empty($articles) && isset($crawling_done))
-                        <div class="bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded relative mb-4" role="alert">
-                            Tidak ditemukan berita terbaru dari situs aktif yang terdaftar.
-                        </div>
-                    @endif
+                    @empty
+                        <p class="text-gray-600">Belum ada Provinsi yang ditambahkan. Silakan tambahkan data wilayah melalui seeder.</p>
+                    @endforelse
                 </div>
+                 {{-- Akhir Desain Ulang --}}
 
                 <div class="mt-8 text-center">
-                    <a href="{{ route('monitoring.sources.index') }}" class="text-blue-500 hover:underline">Kembali ke Daftar Situs Monitoring</a>
+                    <a href="{{ route('dashboard') }}" class="text-blue-500 hover:underline">Kembali ke Dashboard</a>
                 </div>
             </div>
         </div>
-        {{-- Script untuk Loading Indicator --}}
-        <script>
-            document.getElementById('crawlForm').addEventListener('submit', function() {
-                const crawlButton = document.getElementById('crawlButton');
-                const loadingIndicator = document.getElementById('loadingIndicator');
-
-                // Tampilkan indikator loading dan nonaktifkan tombol
-                crawlButton.disabled = true;
-                crawlButton.innerHTML = '<svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-white inline-block" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Memproses...';
-                loadingIndicator.classList.remove('hidden');
-
-                // Opsional: Gulir ke bagian atas atau ke indikator loading
-                // window.scrollTo(0, 0); // Gulir ke atas
-            });
-        </script>
     </body>
 </html>

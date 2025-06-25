@@ -24,9 +24,23 @@ class MonitoringSourceController extends Controller
      */
     public function index()
     {
-        // [MODIFIKASI] Gunakan with('region') untuk Eager Loading
-        $sources = MonitoringSource::with('region')->orderBy('name')->get();
-        return view('sources.index', compact('sources'));
+        $provinces = Region::where('type', 'Provinsi')
+            ->with([
+                'children' => function ($query) {
+                    $query->orderBy('name', 'asc');
+                }, 
+                'children.monitoringSources' => function ($query) {
+                    $query->with('region')->orderBy('name', 'asc');
+                }
+            ])
+            ->orderBy('name', 'asc')
+            ->get();
+        
+        // [BARU] Ambil semua situs yang tidak punya wilayah
+        $uncategorizedSources = MonitoringSource::whereNull('region_id')->orderBy('name', 'asc')->get();
+        
+        // [MODIFIKASI] Teruskan variabel baru ke view
+        return view('sources.index', compact('provinces', 'uncategorizedSources'));
     }
 
     /**
@@ -43,13 +57,15 @@ class MonitoringSourceController extends Controller
     /**
      * Store a newly created monitoring source in storage (from create form).
      */
-    public function store(Request $request) // Modifikasi metode ini
+    public function store(Request $request)
     {
+        // [PERBAIKAN] Tambahkan 'region_id' ke dalam validasi
         $validatedData = $request->validate([
+            'region_id' => 'required|exists:regions,id', // Memastikan region_id valid
             'name' => 'required|string|max:255',
-            'url' => 'required|url:http,https|ends_with:.go.id|unique:monitoring_sources,url',
+            'url' => 'required|url:http,https|unique:monitoring_sources,url',
             'crawl_url' => 'nullable|string',
-            'selector_title' => 'required|string', // Wajib ada sekarang
+            'selector_title' => 'required|string',
             'selector_date' => 'nullable|string',
             'selector_link' => 'nullable|string',
         ]);
@@ -64,6 +80,7 @@ class MonitoringSourceController extends Controller
             $validatedData['crawl_url'] = '/';
         }
 
+        // [PERBAIKAN] $validatedData sekarang sudah berisi 'region_id' yang valid
         MonitoringSource::create($validatedData);
 
         return redirect()->route('monitoring.sources.index')
@@ -86,32 +103,27 @@ class MonitoringSourceController extends Controller
      */
     public function update(Request $request, MonitoringSource $source)
     {
+        // [PERBAIKAN] Tambahkan 'region_id' ke dalam validasi
         $validatedData = $request->validate([
+            'region_id' => 'required|exists:regions,id',
             'name' => 'required|string|max:255',
-            'url' => 'required|url:http,https|ends_with:.go.id|unique:monitoring_sources,url,'.$source->id, // Unique kecuali ID ini
+            'url' => 'required|url:http,https|unique:monitoring_sources,url,'.$source->id,
             'crawl_url' => 'nullable|string',
             'selector_title' => 'required|string',
             'selector_date' => 'nullable|string',
             'selector_link' => 'nullable|string',
-            // 'is_active' => 'boolean', // Hapus validasi ini karena kita akan menanganinya secara manual
         ]);
 
-        // Pastikan URL utama memiliki skema
         if (!preg_match("~^(?:f|ht)tps?://~i", $validatedData['url'])) {
             $validatedData['url'] = "https://" . $validatedData['url'];
         }
 
-        // Default crawl_url jika kosong
         if (empty($validatedData['crawl_url'])) {
             $validatedData['crawl_url'] = '/';
         }
-
-        // --- TANGANANI CHECKBOX 'is_active' SECARA EKSPLISIT ---
-        // Jika checkbox dicentang, request akan memiliki 'is_active'
-        // Jika tidak dicentang, request tidak akan memiliki 'is_active' sama sekali
+        
         $validatedData['is_active'] = $request->has('is_active');
-        // --- AKHIR PENANGANAN CHECKBOX ---
-
+        
         $source->update($validatedData);
 
         return redirect()->route('monitoring.sources.index')
