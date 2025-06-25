@@ -3,6 +3,7 @@
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\AccessController;
 use App\Http\Controllers\Monitoring\MonitoringSourceController; // Tambahkan ini
+use App\Http\Controllers\SelectorPresetController; // TAMBAHKAN BARIS INI
 
 /*
 |--------------------------------------------------------------------------
@@ -31,9 +32,7 @@ Route::middleware('access.code')->group(function () {
     })->name('logout');
 
     // Rute Dashboard Utama
-    Route::get('/dashboard', function () {
-        return view('dashboard');
-    })->name('dashboard');
+    Route::get('/dashboard', [MonitoringSourceController::class, 'showDashboard'])->name('dashboard'); // MODIFIKASI BARIS INI
 
     // Rute untuk Manajemen Situs Monitoring
     Route::get('/monitoring/sources', [MonitoringSourceController::class, 'index'])->name('monitoring.sources.index');
@@ -53,4 +52,10 @@ Route::middleware('access.code')->group(function () {
 
     // [BARU] Rute untuk menguji selector secara real-time
     Route::post('/monitoring/sources/test-selector', [MonitoringSourceController::class, 'testSelector'])->name('monitoring.sources.testSelector');
+
+    // [BARU] Rute untuk menampilkan daftar artikel yang di-crawl
+    Route::get('/monitoring/articles', [MonitoringSourceController::class, 'listArticles'])->name('monitoring.articles.index');
+
+    // [BARU] Rute untuk manajemen Selector Presets (CRUD)
+    Route::resource('selector-presets', SelectorPresetController::class)->except(['show']); // Tidak memerlukan metode 'show'
 });

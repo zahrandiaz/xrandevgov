@@ -20,4 +20,8 @@ class MonitoringSource extends Model
         'last_crawled_at',
         'is_active',
     ];
+
+    protected $casts = [
+        'last_crawled_at' => 'datetime', // TAMBAHKAN BARIS INI
+    ];
 }
