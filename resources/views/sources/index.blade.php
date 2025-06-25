@@ -46,6 +46,7 @@
                             <thead class="bg-gray-50">
                                 <tr>
                                     <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nama</th>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Wilayah</th>
                                     <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">URL Utama</th>
                                     <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">URL Crawl</th>
                                     <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Selector Judul (Sebagian)</th>
@@ -57,6 +58,7 @@
                                 @foreach($sources as $source)
                                     <tr>
                                         <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{{ $source->name }}</td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ $source->region->name ?? 'N/A' }}</td>
                                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500"><a href="{{ $source->url }}" target="_blank" class="text-blue-500 hover:underline">{{ $source->url }}</a></td>
                                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ $source->crawl_url }}</td>
                                         <td class="px-6 py-4 text-sm text-gray-500 truncate max-w-xs">{{ Str::limit($source->selector_title, 30) }}</td>

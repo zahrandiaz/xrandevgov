@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Models\MonitoringSource;
 use App\Models\SelectorPreset;
 use App\Models\CrawledArticle;
+use App\Models\Region;
+use App\Jobs\CrawlSourceJob;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
@@ -22,17 +24,20 @@ class MonitoringSourceController extends Controller
      */
     public function index()
     {
-        $sources = MonitoringSource::orderBy('name')->get();
+        // [MODIFIKASI] Gunakan with('region') untuk Eager Loading
+        $sources = MonitoringSource::with('region')->orderBy('name')->get();
         return view('sources.index', compact('sources'));
     }
 
     /**
      * Show the form for creating a new monitoring source.
      */
-    public function create() // Modifikasi metode ini
+    public function create()
     {
-        $presets = SelectorPreset::all(); // Ambil semua preset
-        return view('sources.create', compact('presets')); // Teruskan ke view
+        $presets = SelectorPreset::all();
+        // [BARU] Ambil semua wilayah, diurutkan berdasarkan tipe lalu nama
+        $regions = Region::orderBy('type')->orderBy('name')->get(); 
+        return view('sources.create', compact('presets', 'regions'));
     }
 
     /**
@@ -68,10 +73,12 @@ class MonitoringSourceController extends Controller
     /**
      * Show the form for editing the specified monitoring source.
      */
-    public function edit(MonitoringSource $source) // Modifikasi metode ini
+    public function edit(MonitoringSource $source)
     {
-        $presets = SelectorPreset::all(); // Ambil semua preset
-        return view('sources.edit', compact('source', 'presets')); // Teruskan ke view
+        $presets = SelectorPreset::all();
+        // [BARU] Ambil semua wilayah
+        $regions = Region::orderBy('type')->orderBy('name')->get();
+        return view('sources.edit', compact('source', 'presets', 'regions'));
     }
 
     /**
@@ -354,169 +361,23 @@ class MonitoringSourceController extends Controller
      */
     public function crawl(Request $request)
     {
-        $httpClient = HttpClient::create(['verify_peer' => false, 'verify_host' => false]);
-        $client = new HttpBrowser($httpClient);
+        // 1. Ambil semua situs yang aktif
+        $sources = MonitoringSource::where('is_active', true)->get();
 
-        $articles = []; // Artikel yang akan ditampilkan di view (baru dicrawl)
-        $sources = MonitoringSource::where('is_active', true)->orderBy('name')->get();
-        $errorMessages = []; // Tambahkan array ini untuk menyimpan pesan error
-        $newlyCrawledCount = 0; // Menghitung artikel baru yang disimpan
+        // 2. Jika tidak ada situs aktif, kembali dengan pesan info
+        if ($sources->isEmpty()) {
+            return redirect()->route('monitoring.sources.index')
+                             ->with('info', 'Tidak ada situs monitoring yang aktif untuk di-crawl.');
+        }
 
+        // 3. Loop setiap situs dan kirim tugasnya ke queue
         foreach ($sources as $source) {
-            try {
-                // Update last_crawled_at sebelum crawling untuk menandai proses dimulai
-                $source->update(['last_crawled_at' => now()]);
-
-                $fullCrawlUrl = $source->crawl_url;
-                if (strpos($fullCrawlUrl, 'http') !== 0) {
-                    $fullCrawlUrl = rtrim($source->url, '/') . '/' . ltrim($fullCrawlUrl, '/');
-                }
-
-                $crawler = $client->request('GET', $fullCrawlUrl);
-                $sourceArticlesRaw = []; // Artikel mentah dari satu sumber
-
-                $titleSelector = $source->selector_title ?: 'h1 a, h2 a, h3 a, .post-title a, .entry-title a';
-                $dateSelector = $source->selector_date ?: 'time, .date, .post-date, .entry-date';
-                $linkSelector = $source->selector_link ?: 'a';
-
-                $crawler->filter($titleSelector)->each(function ($node) use (&$sourceArticlesRaw, $source, $dateSelector, $linkSelector, &$errorMessages) {
-                    try {
-                        $title = trim($node->text());
-                        $link = null;
-                        $date = null; // Ubah menjadi null untuk memungkinkan parsing tanggal yang gagal
-
-                        // Logika pengambilan link (disesuaikan dari metode crawl)
-                        if (!empty($linkSelector) && $node->filter($linkSelector)->count() > 0) {
-                            $firstLinkNodeCrawler = $node->filter($linkSelector)->first();
-                            $domElement = $firstLinkNodeCrawler->getNode(0);
-
-                            if ($domElement instanceof \DOMElement && $domElement->hasAttribute('href')) {
-                                $link = $domElement->getAttribute('href');
-                            } else {
-                                $linkObject = $firstLinkNodeCrawler->link();
-                                if ($linkObject) {
-                                    $link = $linkObject->getUri();
-                                }
-                            }
-                        }
-                        elseif ($node->getNode(0) instanceof \DOMElement && $node->getNode(0)->nodeName === 'a' && $node->getNode(0)->hasAttribute('href')) {
-                            $link = $node->getNode(0)->getAttribute('href');
-                        }
-                        else {
-                            $readMoreNode = $node->closest('div, p, article, li')->filter('a[href*="berita"], a[href*="artikel"], a[href*="read"], a.btn-primary')->first();
-                            if ($readMoreNode->count() > 0) {
-                                $readMoreDomElement = $readMoreNode->getNode(0);
-                                if ($readMoreDomElement instanceof \DOMElement && $readMoreDomElement->hasAttribute('href')) {
-                                    $link = $readMoreDomElement->getAttribute('href');
-                                }
-                            }
-                        }
-
-                        // Pastikan link absolut
-                        if ($link && strpos($link, 'http') !== 0) {
-                            $link = rtrim($source->url, '/') . '/' . ltrim($link, '/');
-                        }
-
-                        // Logika pengambilan tanggal (disesuaikan dari metode crawl)
-                        $dateCandidateNode = null;
-                        if (!empty($dateSelector) && $node->filter($dateSelector)->count() > 0) {
-                            $dateCandidateNode = $node->filter($dateSelector)->first();
-                        } else {
-                            $dateCandidateNode = $node->closest('li, div, article, p, span')->filter($dateSelector)->first();
-                        }
-
-                        if ($dateCandidateNode && $dateCandidateNode->count() > 0) {
-                            $dateDomElement = $dateCandidateNode->getNode(0);
-                            if ($dateDomElement instanceof \DOMElement) {
-                                $dateText = trim($dateDomElement->textContent);
-                                $parsedDate = strtotime($dateText);
-                                if ($parsedDate !== false) {
-                                    $date = date('Y-m-d H:i:s', $parsedDate); // Simpan sebagai datetime
-                                } else {
-                                    if ($dateDomElement->hasAttribute('datetime')) {
-                                        $date = date('Y-m-d H:i:s', strtotime($dateDomElement->getAttribute('datetime')));
-                                    }
-                                }
-                            }
-                        }
-
-                        // Verifikasi bahwa link berasal dari domain yang sama atau subdomain
-                        $parsedSourceUrl = parse_url($source->url, PHP_URL_HOST);
-                        $parsedArticleLinkHost = $link ? parse_url($link, PHP_URL_HOST) : null;
-
-                        if (filter_var($link, FILTER_VALIDATE_URL) && $title && $parsedSourceUrl === $parsedArticleLinkHost) {
-                            $sourceArticlesRaw[] = [
-                                'title' => $title,
-                                'link' => $link,
-                                'date' => $date, // Bisa null jika tidak ditemukan/parse
-                                'source_name' => $source->name, // Untuk ditampilkan di view sementara
-                                'monitoring_source_id' => $source->id, // Untuk disimpan ke DB
-                            ];
-                        } else {
-                            Log::warning('Invalid article data from ' . $source->url . ': Title: ' . $title . ' Link: ' . $link);
-                            $errorMessages[] = "Artikel tidak lengkap atau tidak valid dari {$source->name} ({$source->url}). Judul: \"{$title}\" Link: \"{$link}\"";
-                        }
-                    } catch (\Exception $e) {
-                        Log::warning('Error parsing single article from ' . $source->url . ': ' . $e->getMessage());
-                        $errorMessages[] = "Gagal memproses satu artikel dari {$source->name} ({$source->url}). Error: " . $e->getMessage();
-                    }
-                });
-
-                // --- LOGIKA PENYIMPANAN DAN PENGATURAN DUPLIKASI ARTIKEL ---
-                foreach ($sourceArticlesRaw as $articleData) {
-                    // Cek duplikasi berdasarkan URL
-                    // Jika URL adalah unique key di DB, maka updateOrCreate akan mengelola duplikasi dengan baik
-                    $crawledArticle = CrawledArticle::updateOrCreate(
-                        ['url' => $articleData['link']], // Kriteria untuk menemukan record yang sudah ada
-                        [
-                            'monitoring_source_id' => $articleData['monitoring_source_id'],
-                            'title' => $articleData['title'],
-                            'published_date' => $articleData['date'], // Bisa null
-                            'crawled_at' => now(), // Update timestamp crawled_at setiap kali di-crawl
-                        ]
-                    );
-
-                    // Jika artikel baru dibuat (bukan diperbarui), tambahkan ke daftar yang akan ditampilkan
-                    if ($crawledArticle->wasRecentlyCreated) {
-                        $articles[] = [ // Hanya tambahkan yang baru ke $articles untuk ditampilkan
-                            'title' => $articleData['title'],
-                            'link' => $articleData['link'],
-                            'date' => $articleData['date'] ? \Carbon\Carbon::parse($articleData['date'])->format('Y-m-d') : 'Tidak Diketahui', // Format untuk tampilan
-                            'source' => $articleData['source_name'],
-                        ];
-                        $newlyCrawledCount++; // Hitung artikel baru
-                    }
-                }
-                // --- AKHIR LOGIKA PENYIMPANAN DAN PENGATURAN DUPLIKASI ARTIKEL ---
-
-            } catch (\GuzzleHttp\Exception\ConnectException $e) {
-                Log::error("Could not connect to {$source->url}: " . $e->getMessage());
-                $errorMessages[] = "Gagal terhubung ke {$source->name} ({$source->url}). Pastikan URL benar dan situs aktif.";
-            } catch (\Exception $e) {
-                Log::error("Error crawling {$source->url}: " . $e->getMessage());
-                $errorMessages[] = "Terjadi kesalahan saat mengambil data dari {$source->name} ({$source->url}). Error: " . $e->getMessage();
-            }
+            CrawlSourceJob::dispatch($source);
         }
-
-        // Flash semua pesan error ke session
-        if (!empty($errorMessages)) {
-            session()->flash('crawl_errors', $errorMessages);
-        }
-
-        // Flash pesan sukses jika ada artikel baru
-        if ($newlyCrawledCount > 0) {
-            session()->flash('success', "Berhasil mengambil dan menyimpan {$newlyCrawledCount} artikel baru.");
-        } elseif (empty($errorMessages)) {
-            // Jika tidak ada artikel baru, dan tidak ada error, berarti tidak ada yang baru ditemukan
-            session()->flash('info', "Tidak ada artikel baru yang ditemukan dari situs aktif yang terdaftar.");
-        }
-
-
-        // Redirect ke index, bisa menampilkan artikel yang baru di-crawl jika ingin
-        // Atau cukup biarkan view index memuat dari database nanti
-        // Untuk sekarang, kita tetap lewatkan artikel yang baru di-crawl untuk tampilan segera
-        return view('sources.index', compact('articles', 'sources'))
-                    ->with('crawling_done', true); // Tetap gunakan ini untuk menunjukkan proses selesai
+        
+        // 4. Kembali ke halaman index dengan pesan sukses
+        return redirect()->route('monitoring.sources.index')
+                         ->with('success', 'Proses crawling untuk ' . $sources->count() . ' situs aktif telah dimulai di latar belakang.');
     }
 
     /**

@@ -11,6 +11,7 @@ class MonitoringSource extends Model
 
     // Tambahkan ini agar kolom bisa diisi secara massal
     protected $fillable = [
+        'region_id', // Tambahkan ini
         'name',
         'url',
         'crawl_url',
@@ -24,4 +25,12 @@ class MonitoringSource extends Model
     protected $casts = [
         'last_crawled_at' => 'datetime', // TAMBAHKAN BARIS INI
     ];
+
+    /**
+     * Get the region that the monitoring source belongs to.
+     */
+    public function region()
+    {
+        return $this->belongsTo(Region::class);
+    }
 }

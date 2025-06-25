@@ -45,6 +45,26 @@
                             @error('url')<p class="text-sm text-red-600 mt-2">{{ $message }}</p>@enderror
                         </div>
 
+                        {{-- [BARU] Dropdown Wilayah --}}
+                        <div class="md:col-span-2">
+                            <label for="region_id" class="block font-medium text-sm text-gray-700">Wilayah</label>
+                            <select id="region_id" name="region_id" required
+                                class="block w-full mt-1 border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm">
+                                <option value="">-- Pilih Wilayah --</option>
+                                @foreach($regions->where('type', 'Provinsi') as $provinsi)
+                                    <optgroup label="{{ $provinsi->name }}">
+                                        @foreach($regions->where('parent_id', $provinsi->id) as $kabkota)
+                                            <option value="{{ $kabkota->id }}" {{ old('region_id') == $kabkota->id ? 'selected' : '' }}>
+                                                {{ $kabkota->name }}
+                                            </option>
+                                        @endforeach
+                                    </optgroup>
+                                @endforeach
+                            </select>
+                            <p class="mt-1 text-xs text-gray-500">Pilih Kabupaten/Kota tempat situs ini berada.</p>
+                            @error('region_id')<p class="text-sm text-red-600 mt-2">{{ $message }}</p>@enderror
+                        </div>
+
                         <div class="md:col-span-2">
                             <label for="crawl_url" class="block font-medium text-sm text-gray-700">URL Crawl Spesifik (misal: /berita/ atau /blog/page/1)</label>
                             <input type="text" id="crawlUrlInput" name="crawl_url" value="{{ old('crawl_url', '/') }}"
