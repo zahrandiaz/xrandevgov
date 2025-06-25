@@ -80,28 +80,45 @@
 
                             {{-- Daftar Situs di dalam Provinsi (Muncul/Sembunyi) --}}
                             <div x-show="open" class="border-t border-gray-200 p-4 space-y-3">
-                                @forelse($province->children as $kabkota)
-                                    @if($kabkota->monitoringSources->isNotEmpty())
-                                        @foreach($kabkota->monitoringSources as $source)
-                                        <div class="flex items-center justify-between p-3 bg-gray-50 rounded-md">
-                                            <div class="flex items-center space-x-3">
-                                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full {{ $source->is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800' }}">
-                                                    {{ $source->is_active ? 'Aktif' : 'Nonaktif' }}
-                                                </span>
-                                                <div>
-                                                    <p class="text-sm font-medium text-gray-900">{{ $source->name }}</p>
-                                                    <p class="text-xs text-gray-500">{{ $source->region->name ?? 'N/A' }}</p>
-                                                </div>
-                                            </div>
-                                            <div class="text-sm">
-                                                <a href="{{ route('monitoring.sources.edit', $source) }}" class="text-indigo-600 hover:text-indigo-900">Edit</a>
+                                
+                                {{-- [FIX] Tampilkan dulu situs BKD level Provinsi --}}
+                                @foreach($province->monitoringSources as $source)
+                                    <div class="flex items-center justify-between p-3 bg-blue-50 rounded-md">
+                                        <div class="flex items-center space-x-3">
+                                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full {{ $source->is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800' }}">
+                                                {{ $source->is_active ? 'Aktif' : 'Nonaktif' }}
+                                            </span>
+                                            <div>
+                                                <p class="text-sm font-medium text-gray-900">{{ $source->name }}</p>
+                                                <p class="text-xs text-blue-600 font-semibold">{{ $source->region->name ?? 'N/A' }} (BKD Provinsi)</p>
                                             </div>
                                         </div>
-                                        @endforeach
-                                    @endif
-                                @empty
-                                    <p class="text-sm text-gray-500 px-3">Belum ada Kabupaten/Kota yang memiliki situs monitoring di provinsi ini.</p>
-                                @endforelse
+                                        <div class="text-sm">
+                                            <a href="{{ route('monitoring.sources.edit', $source) }}" class="text-indigo-600 hover:text-indigo-900">Edit</a>
+                                        </div>
+                                    </div>
+                                @endforeach
+
+                                {{-- Lalu tampilkan situs BKPSDM level Kab/Kota --}}
+                                @foreach($province->children as $kabkota)
+                                    @foreach($kabkota->monitoringSources as $source)
+                                    <div class="flex items-center justify-between p-3 bg-gray-50 rounded-md">
+                                        <div class="flex items-center space-x-3">
+                                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full {{ $source->is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800' }}">
+                                                {{ $source->is_active ? 'Aktif' : 'Nonaktif' }}
+                                            </span>
+                                            <div>
+                                                <p class="text-sm font-medium text-gray-900">{{ $source->name }}</p>
+                                                <p class="text-xs text-gray-500">{{ $source->region->name ?? 'N/A' }} (BKPSDM)</p>
+                                            </div>
+                                        </div>
+                                        <div class="text-sm">
+                                            <a href="{{ route('monitoring.sources.edit', $source) }}" class="text-indigo-600 hover:text-indigo-900">Edit</a>
+                                        </div>
+                                    </div>
+                                    @endforeach
+                                @endforeach
+
                             </div>
                         </div>
                     @empty

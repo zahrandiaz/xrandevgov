@@ -12,6 +12,7 @@ class MonitoringSource extends Model
     // Tambahkan ini agar kolom bisa diisi secara massal
     protected $fillable = [
         'region_id', // Tambahkan ini
+        'tipe_instansi',
         'name',
         'url',
         'crawl_url',

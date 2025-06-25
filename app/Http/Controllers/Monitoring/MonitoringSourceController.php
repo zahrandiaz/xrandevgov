@@ -26,6 +26,10 @@ class MonitoringSourceController extends Controller
     {
         $provinces = Region::where('type', 'Provinsi')
             ->with([
+                // [FIX] Muat juga sources yang terhubung LANGSUNG ke provinsi
+                'monitoringSources' => function ($query) {
+                    $query->with('region')->orderBy('name', 'asc');
+                },
                 'children' => function ($query) {
                     $query->orderBy('name', 'asc');
                 }, 
@@ -36,10 +40,8 @@ class MonitoringSourceController extends Controller
             ->orderBy('name', 'asc')
             ->get();
         
-        // [BARU] Ambil semua situs yang tidak punya wilayah
         $uncategorizedSources = MonitoringSource::whereNull('region_id')->orderBy('name', 'asc')->get();
         
-        // [MODIFIKASI] Teruskan variabel baru ke view
         return view('sources.index', compact('provinces', 'uncategorizedSources'));
     }
 
@@ -49,9 +51,11 @@ class MonitoringSourceController extends Controller
     public function create()
     {
         $presets = SelectorPreset::all();
-        // [BARU] Ambil semua wilayah, diurutkan berdasarkan tipe lalu nama
-        $regions = Region::orderBy('type')->orderBy('name')->get(); 
-        return view('sources.create', compact('presets', 'regions'));
+        // [MODIFIKASI] Ambil data provinsi dan kab/kota secara terpisah
+        $provinces = Region::where('type', 'Provinsi')->orderBy('name')->get();
+        $kabkotas = Region::where('type', 'Kabupaten/Kota')->orderBy('name')->get();
+        
+        return view('sources.create', compact('presets', 'provinces', 'kabkotas'));
     }
 
     /**
@@ -59,32 +63,33 @@ class MonitoringSourceController extends Controller
      */
     public function store(Request $request)
     {
-        // [PERBAIKAN] Tambahkan 'region_id' ke dalam validasi
         $validatedData = $request->validate([
-            'region_id' => 'required|exists:regions,id', // Memastikan region_id valid
             'name' => 'required|string|max:255',
             'url' => 'required|url:http,https|unique:monitoring_sources,url',
-            'crawl_url' => 'nullable|string',
-            'selector_title' => 'required|string',
-            'selector_date' => 'nullable|string',
-            'selector_link' => 'nullable|string',
+            'tipe_instansi' => 'required|in:BKD,BKPSDM',
+            'region_id' => ['required', 'exists:regions,id',
+                function ($attribute, $value, $fail) use ($request) {
+                    $region = Region::find($value);
+                    if (!$region) return; // Sebenarnya sudah ditangani 'exists', tapi untuk keamanan.
+                    if ($request->input('tipe_instansi') == 'BKD' && $region->type !== 'Provinsi') {
+                        $fail('Untuk tipe BKD, wilayah yang dipilih harus berupa Provinsi.');
+                    }
+                    if ($request->input('tipe_instansi') == 'BKPSDM' && $region->type !== 'Kabupaten/Kota') {
+                        $fail('Untuk tipe BKPSDM, wilayah yang dipilih harus berupa Kabupaten/Kota.');
+                    }
+                },
+            ],
+            'crawl_url' => 'nullable|string', 'selector_title' => 'required|string',
+            'selector_date' => 'nullable|string', 'selector_link' => 'nullable|string',
         ]);
+        
+        if (!preg_match("~^(?:f|ht)tps?://~i", $validatedData['url'])) { $validatedData['url'] = "https://" . $validatedData['url']; }
+        if (empty($validatedData['crawl_url'])) { $validatedData['crawl_url'] = '/'; }
 
-        // Pastikan URL utama memiliki skema
-        if (!preg_match("~^(?:f|ht)tps?://~i", $validatedData['url'])) {
-            $validatedData['url'] = "https://" . $validatedData['url'];
-        }
-
-        // Default crawl_url jika kosong
-        if (empty($validatedData['crawl_url'])) {
-            $validatedData['crawl_url'] = '/';
-        }
-
-        // [PERBAIKAN] $validatedData sekarang sudah berisi 'region_id' yang valid
+        // [FIX] Tambahkan tipe_instansi ke data yang akan dibuat
         MonitoringSource::create($validatedData);
 
-        return redirect()->route('monitoring.sources.index')
-                         ->with('success', 'Situs monitoring berhasil ditambahkan!');
+        return redirect()->route('monitoring.sources.index')->with('success', 'Situs monitoring berhasil ditambahkan!');
     }
 
     /**
@@ -93,9 +98,11 @@ class MonitoringSourceController extends Controller
     public function edit(MonitoringSource $source)
     {
         $presets = SelectorPreset::all();
-        // [BARU] Ambil semua wilayah
-        $regions = Region::orderBy('type')->orderBy('name')->get();
-        return view('sources.edit', compact('source', 'presets', 'regions'));
+        // [MODIFIKASI] Ambil data provinsi dan kab/kota secara terpisah
+        $provinces = Region::where('type', 'Provinsi')->orderBy('name')->get();
+        $kabkotas = Region::where('type', 'Kabupaten/Kota')->orderBy('name')->get();
+
+        return view('sources.edit', compact('source', 'presets', 'provinces', 'kabkotas'));
     }
 
     /**
@@ -103,31 +110,33 @@ class MonitoringSourceController extends Controller
      */
     public function update(Request $request, MonitoringSource $source)
     {
-        // [PERBAIKAN] Tambahkan 'region_id' ke dalam validasi
         $validatedData = $request->validate([
-            'region_id' => 'required|exists:regions,id',
             'name' => 'required|string|max:255',
             'url' => 'required|url:http,https|unique:monitoring_sources,url,'.$source->id,
-            'crawl_url' => 'nullable|string',
-            'selector_title' => 'required|string',
-            'selector_date' => 'nullable|string',
-            'selector_link' => 'nullable|string',
+            'tipe_instansi' => 'required|in:BKD,BKPSDM',
+            'region_id' => ['required', 'exists:regions,id',
+                 function ($attribute, $value, $fail) use ($request) {
+                    $region = Region::find($value);
+                    if (!$region) return;
+                    if ($request->input('tipe_instansi') == 'BKD' && $region->type !== 'Provinsi') {
+                        $fail('Untuk tipe BKD, wilayah yang dipilih harus berupa Provinsi.');
+                    }
+                    if ($request->input('tipe_instansi') == 'BKPSDM' && $region->type !== 'Kabupaten/Kota') {
+                        $fail('Untuk tipe BKPSDM, wilayah yang dipilih harus berupa Kabupaten/Kota.');
+                    }
+                },
+            ],
+            'crawl_url' => 'nullable|string', 'selector_title' => 'required|string',
+            'selector_date' => 'nullable|string', 'selector_link' => 'nullable|string',
         ]);
-
-        if (!preg_match("~^(?:f|ht)tps?://~i", $validatedData['url'])) {
-            $validatedData['url'] = "https://" . $validatedData['url'];
-        }
-
-        if (empty($validatedData['crawl_url'])) {
-            $validatedData['crawl_url'] = '/';
-        }
+        
+        if (!preg_match("~^(?:f|ht)tps?://~i", $validatedData['url'])) { $validatedData['url'] = "https://" . $validatedData['url']; }
+        if (empty($validatedData['crawl_url'])) { $validatedData['crawl_url'] = '/'; }
         
         $validatedData['is_active'] = $request->has('is_active');
-        
         $source->update($validatedData);
 
-        return redirect()->route('monitoring.sources.index')
-                         ->with('success', 'Situs monitoring berhasil diperbarui!');
+        return redirect()->route('monitoring.sources.index')->with('success', 'Situs monitoring berhasil diperbarui!');
     }
 
     /**
