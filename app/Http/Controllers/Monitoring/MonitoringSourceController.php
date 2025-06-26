@@ -204,16 +204,58 @@ class MonitoringSourceController extends Controller
                          ->with('success', 'Proses crawling untuk ' . $sources->count() . ' situs aktif telah dimulai di latar belakang.');
     }
 
+    public function crawlSingle(MonitoringSource $source)
+    {
+        // Langsung kirim job untuk satu situs ini ke queue
+        CrawlSourceJob::dispatch($source);
+        
+        // Kembali ke halaman index dengan pesan sukses yang spesifik
+        return redirect()->route('monitoring.sources.index')
+                         ->with('success', "Proses crawling untuk situs '{$source->name}' telah dimulai di latar belakang.");
+    }
+
     /**
      * Display a listing of crawled articles.
      */
-    public function listArticles()
+    public function listArticles(Request $request)
     {
-        $articles = CrawledArticle::with('source')
-                                ->orderBy('published_date', 'desc')
-                                ->paginate(15);
+        // 1. Mulai query builder
+        $query = CrawledArticle::query();
 
-        return view('articles.index', compact('articles'));
+        // 2. Terapkan filter berdasarkan input dari request
+        if ($keyword = $request->input('keyword')) {
+            $query->where('title', 'like', "%{$keyword}%");
+        }
+
+        if ($startDate = $request->input('start_date')) {
+            $query->whereDate('published_date', '>=', $startDate);
+        }
+
+        if ($endDate = $request->input('end_date')) {
+            $query->whereDate('published_date', '<=', $endDate);
+        }
+
+        // 3. Eager load relasi dan urutkan hasilnya
+        $query->with('source')->orderBy('published_date', 'desc');
+
+        // 4. Lakukan paginasi, dan pastikan parameter pencarian tetap ada di link paginasi
+        $articles = $query->paginate(15)->withQueryString();
+
+        // 5. Kirim data artikel dan input pencarian ke view
+        return view('articles.index', [
+            'articles' => $articles,
+            'filters' => $request->only(['keyword', 'start_date', 'end_date']) // Untuk mengisi ulang form
+        ]);
+    }
+
+    public function destroyArticle(CrawledArticle $article)
+    {
+        // Hapus data artikel dari database
+        $article->delete();
+
+        // Kembali ke halaman daftar artikel dengan pesan sukses
+        return redirect()->route('monitoring.articles.index')
+                         ->with('success', 'Artikel berhasil dihapus.');
     }
 
     public function showDashboard()

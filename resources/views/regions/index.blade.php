@@ -61,8 +61,9 @@
                     @endforelse
                 </div>
             </div>
-             <div class="mt-8 text-center">
-                <a href="{{ route('dashboard') }}" class="text-blue-500 hover:underline">Kembali ke Dashboard</a>
+            <div class="mt-8 text-center">
+                    <a href="{{ route('dashboard') }}" class="text-blue-500 hover:underline mr-4">Kembali ke Dashboard</a>
+                    <a href="{{ route('monitoring.sources.index') }}" class="text-blue-500 hover:underline">Kembali ke Manajemen Situs</a>
             </div>
         </div>
     </body>

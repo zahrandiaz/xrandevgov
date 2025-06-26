@@ -50,11 +50,17 @@ Route::middleware('access.code')->group(function () {
     // Rute untuk menjalankan proses crawling
     Route::post('/monitoring/sources/crawl', [MonitoringSourceController::class, 'crawl'])->name('monitoring.sources.crawl');
 
+    // [BARU] Rute untuk menjalankan proses crawling SATU situs spesifik
+    Route::post('/monitoring/sources/{source}/crawl-single', [MonitoringSourceController::class, 'crawlSingle'])->name('monitoring.sources.crawl_single');
+
     // [BARU] Rute untuk menguji selector secara real-time
     Route::post('/monitoring/sources/test-selector', [MonitoringSourceController::class, 'testSelector'])->name('monitoring.sources.testSelector');
 
     // [BARU] Rute untuk menampilkan daftar artikel yang di-crawl
     Route::get('/monitoring/articles', [MonitoringSourceController::class, 'listArticles'])->name('monitoring.articles.index');
+
+    // [BARU] Rute untuk MENGHAPUS satu artikel spesifik
+    Route::delete('/monitoring/articles/{article}', [MonitoringSourceController::class, 'destroyArticle'])->name('monitoring.articles.destroy');
 
     // [BARU] Rute untuk manajemen Selector Presets (CRUD)
     Route::resource('selector-presets', SelectorPresetController::class)->except(['show']); // Tidak memerlukan metode 'show'
