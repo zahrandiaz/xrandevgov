@@ -39,18 +39,16 @@
 
 
                 {{-- Petunjuk Penggunaan --}}
-                <div class="mb-6 bg-blue-50 border-l-4 border-blue-400 p-4">
-                    <h4 class="font-bold text-lg text-gray-800">Petunjuk Penggunaan:</h4>
-                    <ol class="list-decimal list-inside mt-2 text-gray-700 space-y-1">
-                        <li>Gunakan file CSV dengan header yang sesuai. Header wajib: <strong>`nama_situs`</strong>, <strong>`url_situs`</strong>, <strong>`nama_wilayah`</strong>.</li>
-                        <li>Kolom <strong>`nama_wilayah`</strong> harus berisi nama Kabupaten/Kota yang <strong>sudah ada</strong> di database (misal: "Kota Tangerang").</li>
-                        <li>Kolom opsional: <strong>`url_crawl`</strong>, <strong>`selector_title`</strong>, <strong>`selector_date`</strong>, <strong>`selector_link`</strong>.</li>
-                        <li>Pastikan file disimpan dalam format CSV (Comma-Separated Values).</li>
-                        <li>
-                            <a href="#" class="text-blue-600 hover:underline font-semibold">[Fitur Nanti] Unduh Template CSV</a>
-                        </li>
-                    </ol>
-                </div>
+                    <div class="mb-6 bg-blue-50 border-l-4 border-blue-400 p-4">
+                        <h4 class="font-bold text-lg text-gray-800">Petunjuk Penggunaan:</h4>
+                        <ol class="list-decimal list-inside mt-2 text-gray-700 space-y-1">
+                            <li>Gunakan file CSV dengan header yang sesuai. Header wajib: <strong>`nama_situs`</strong>, <strong>`url_situs`</strong>, <strong>`nama_wilayah`</strong>, dan <strong>`tipe_instansi`</strong>.</li>
+                            <li>Kolom <strong>`tipe_instansi`</strong> harus diisi dengan `BKD` atau `BKPSDM` (huruf besar/kecil tidak masalah).</li>
+                            <li>Kolom <strong>`nama_wilayah`</strong> harus berisi nama Provinsi atau Kab/Kota yang <strong>sudah ada</strong> di database.</li>
+                            <li>Pastikan ada kesesuaian: `BKD` harus dengan wilayah Provinsi, dan `BKPSDM` dengan wilayah Kabupaten/Kota.</li>
+                            <li>Kolom opsional: <strong>`url_crawl`</strong>, <strong>`selector_title`</strong>, <strong>`selector_date`</strong>, <strong>`selector_link`</strong>.</li>
+                        </ol>
+                    </div>
 
                 {{-- Form Upload --}}
                 <form action="{{ route('import.sources.handle') }}" method="POST" enctype="multipart/form-data">

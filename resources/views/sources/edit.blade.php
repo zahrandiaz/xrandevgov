@@ -114,6 +114,20 @@
                             <label for="selector_link" class="block font-medium text-sm text-gray-700">Selector CSS Link Berita</label>
                             <input type="text" id="selectorLinkInput" name="selector_link" value="{{ old('selector_link', $source->selector_link) }}" class="block w-full mt-1 border-gray-300 rounded-md shadow-sm">
                         </div>
+                        {{-- [FIX] Kembalikan Tombol Uji Selector --}}
+                        <div class="md:col-span-2 mt-4">
+                            <button type="button" id="testSelectorBtn" class="bg-indigo-500 text-white py-2 px-4 rounded-md hover:bg-indigo-600 focus:outline-none focus:ring focus:border-indigo-300">
+                                Uji Selector
+                            </button>
+                            <div id="testResultArea" class="mt-4 p-4 border rounded-md hidden">
+                                <div id="testLoadingIndicator" class="hidden flex items-center text-gray-700">
+                                    <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-indigo-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                                    <span>Menguji selector, harap tunggu...</span>
+                                </div>
+                                <div id="testResultMessage" class="text-sm font-semibold mb-2"></div>
+                                <ul id="testArticleList" class="list-disc list-inside text-sm text-gray-700"></ul>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -126,5 +140,82 @@
             </form>
         </div>
     </div>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Event listener untuk Preset Selector
+            const presetSelector = document.getElementById('presetSelector');
+            presetSelector.addEventListener('change', function() {
+                const selectedOption = this.options[this.selectedIndex];
+                document.getElementById('selectorTitleInput').value = selectedOption.dataset.title || '';
+                document.getElementById('selectorDateInput').value = selectedOption.dataset.date || '';
+                document.getElementById('selectorLinkInput').value = selectedOption.dataset.link || '';
+            });
+
+            // Event listener untuk Tombol Uji Selector
+            const testSelectorBtn = document.getElementById('testSelectorBtn');
+            testSelectorBtn.addEventListener('click', function() {
+                // ... (Semua konstanta dan logika axios untuk testSelector diletakkan di sini) ...
+                const urlInput = document.getElementById('urlInput');
+                const crawlUrlInput = document.getElementById('crawlUrlInput');
+                const selectorTitleInput = document.getElementById('selectorTitleInput');
+                const selectorDateInput = document.getElementById('selectorDateInput');
+                const selectorLinkInput = document.getElementById('selectorLinkInput');
+                const testResultArea = document.getElementById('testResultArea');
+                const testLoadingIndicator = document.getElementById('testLoadingIndicator');
+                const testResultMessage = document.getElementById('testResultMessage');
+                const testArticleList = document.getElementById('testArticleList');
+
+                const url = urlInput.value;
+                const crawl_url = crawlUrlInput.value;
+                const selector_title = selectorTitleInput.value;
+                const selector_date = selectorDateInput.value;
+                const selector_link = selectorLinkInput.value;
+
+                testResultArea.classList.add('hidden');
+                testResultMessage.textContent = '';
+                testArticleList.innerHTML = '';
+                testLoadingIndicator.classList.remove('hidden');
+                testSelectorBtn.disabled = true;
+
+                if (!url || !selector_title) {
+                    testResultMessage.textContent = 'URL Utama Situs dan Selector Judul Berita wajib diisi untuk pengujian.';
+                    testResultArea.classList.remove('hidden');
+                    testLoadingIndicator.classList.add('hidden');
+                    testSelectorBtn.disabled = false;
+                    return;
+                }
+
+                let fullUrl = url;
+                if (!/^https?:\/\//i.test(fullUrl)) {
+                    fullUrl = "https://" + fullUrl;
+                }
+
+                axios.post('{{ route('monitoring.sources.testSelector') }}', {
+                    url: fullUrl, crawl_url, selector_title, selector_date, selector_link
+                })
+                .then(function (response) {
+                    testResultArea.classList.remove('hidden');
+                    if (response.data.success && response.data.articles.length > 0) {
+                        testResultMessage.textContent = `Berhasil! ${response.data.message || 'Ditemukan ' + response.data.articles.length + ' artikel.'}`;
+                        response.data.articles.forEach(article => {
+                            const listItem = document.createElement('li');
+                            listItem.innerHTML = '<strong>' + (article.title || 'Tanpa Judul') + '</strong> (' + (article.date || 'Tanpa Tanggal') + ') - <a href="' + article.link + '" target="_blank" class="text-blue-700 hover:underline">Lihat</a>';
+                            testArticleList.appendChild(listItem);
+                        });
+                    } else {
+                        testResultMessage.textContent = `Selesai, namun tidak ada artikel ditemukan. Pesan: ${response.data.message || 'Periksa kembali selector atau URL.'}`;
+                    }
+                })
+                .catch(function (error) {
+                    testResultArea.classList.remove('hidden');
+                    testResultMessage.textContent = `Gagal: ${error.response?.data?.message || error.message}`;
+                })
+                .finally(function() {
+                    testLoadingIndicator.classList.add('hidden');
+                    testSelectorBtn.disabled = false;
+                });
+            });
+        });
+    </script>
 </body>
 </html>
