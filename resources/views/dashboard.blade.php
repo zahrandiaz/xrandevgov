@@ -13,26 +13,29 @@
                 <p class="text-lg text-gray-700 mt-2">Anda berhasil masuk dengan kode akses.</p>
             </div>
 
-            {{-- [MODIFIKASI] Seksi Navigasi Utama --}}
             <div class="pt-6 border-t">
                 <h2 class="text-xl font-semibold text-center text-gray-800 mb-4">Pusat Kendali & Navigasi</h2>
                 <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                    <a href="{{ route('monitoring.sources.index') }}" class="bg-green-500 text-white p-4 rounded-lg shadow hover:bg-green-600 text-center">
+                    <a href="{{ route('monitoring.sources.index') }}" class="bg-green-500 text-white p-4 rounded-lg shadow hover:bg-green-600 text-center flex items-center justify-center">
                         <span class="font-semibold">Manajemen Situs</span>
                     </a>
-                    <a href="{{ route('monitoring.articles.index') }}" class="bg-blue-500 text-white p-4 rounded-lg shadow hover:bg-blue-600 text-center">
+                    <a href="{{ route('monitoring.articles.index') }}" class="bg-blue-500 text-white p-4 rounded-lg shadow hover:bg-blue-600 text-center flex items-center justify-center">
                         <span class="font-semibold">Daftar Artikel</span>
                     </a>
-                    <a href="{{ route('regions.index') }}" class="bg-indigo-500 text-white p-4 rounded-lg shadow hover:bg-indigo-600 text-center">
+                    <a href="{{ route('regions.index') }}" class="bg-indigo-500 text-white p-4 rounded-lg shadow hover:bg-indigo-600 text-center flex items-center justify-center">
                         <span class="font-semibold">Manajemen Wilayah</span>
                     </a>
-                    <a href="{{ route('import.sources.show') }}" class="bg-purple-500 text-white p-4 rounded-lg shadow hover:bg-purple-600 text-center">
+                    <a href="{{ route('import.sources.show') }}" class="bg-purple-500 text-white p-4 rounded-lg shadow hover:bg-purple-600 text-center flex items-center justify-center">
                         <span class="font-semibold">Impor Data</span>
                     </a>
-                    <a href="{{ route('selector-presets.index') }}" class="bg-gray-700 text-white p-4 rounded-lg shadow hover:bg-gray-800 text-center">
+                    <a href="{{ route('selector-presets.index') }}" class="bg-gray-700 text-white p-4 rounded-lg shadow hover:bg-gray-800 text-center flex items-center justify-center">
                         <span class="font-semibold">Manajemen Preset</span>
                     </a>
-                    <a href="{{ route('logout') }}" class="bg-red-500 text-white p-4 rounded-lg shadow hover:bg-red-600 text-center">
+                    {{-- [BARU] Tombol untuk Manajemen Kamus --}}
+                    <a href="{{ route('suggestion-selectors.index') }}" class="bg-orange-500 text-white p-4 rounded-lg shadow hover:bg-orange-600 text-center flex items-center justify-center">
+                        <span class="font-semibold">Manajemen Kamus</span>
+                    </a>
+                    <a href="{{ route('logout') }}" class="bg-red-500 text-white p-4 rounded-lg shadow hover:bg-red-600 text-center flex items-center justify-center col-span-2 md:col-span-1 lg:col-span-2">
                         <span class="font-semibold">Logout</span>
                     </a>
                 </div>

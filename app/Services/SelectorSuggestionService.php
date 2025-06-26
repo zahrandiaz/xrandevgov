@@ -2,72 +2,45 @@
 
 namespace App\Services;
 
+use App\Models\SuggestionSelector; // [BARU] Impor model kita
+use Illuminate\Support\Facades\Cache; // [BARU] Impor Cache untuk performa
+
 /**
  * Class SelectorSuggestionService
- * Menyimpan dan menyediakan "kamus" selector CSS yang umum digunakan.
+ * [MODIFIKASI] Menyediakan "kamus" selector CSS dinamis dari database.
  */
 class SelectorSuggestionService
 {
     /**
-     * Mengembalikan daftar (array) selector yang paling umum digunakan untuk judul artikel.
-     * Daftar diurutkan dari yang paling umum/kuat hingga yang kurang umum.
+     * [MODIFIKASI] Mengambil daftar selector judul dari database.
+     * Hasilnya di-cache untuk mengurangi query ke database.
      *
      * @return array
      */
     public function getTitleSelectors(): array
     {
-        return [
-            // WordPress & Umum
-            'h1.entry-title a',
-            'h2.entry-title a',
-            '.entry-title a',
-            'h1.post-title a',
-            'h2.post-title a',
-            '.post-title a',
-            'h1.page-title', // Untuk judul yang tidak memiliki link
-            'h1 a',
-            'h2 a',
-            'h3 a',
-
-            // Struktur Artikel Umum
-            '.article-title a',
-            '.news-title a',
-            '.entry-header h2 a',
-            'header.entry-header h1',
-            '.td-module-thumb a', // Tema Newspaper/Newsmag
-            '.td-block-span6 h3 a',
-            'a.post-link',
-            
-            // Lain-lain
-            '.media-heading a',
-        ];
+        // Cache data selama 60 menit untuk performa.
+        // Jika ada perubahan di database, cache akan diperbarui setelah 60 menit.
+        return Cache::remember('suggestion_selectors_title', 3600, function () {
+            return SuggestionSelector::where('type', 'title')
+                ->orderBy('priority', 'desc') // Urutkan berdasarkan prioritas
+                ->pluck('selector') // Ambil hanya kolom 'selector'
+                ->all(); // Konversi menjadi array biasa
+        });
     }
 
     /**
-     * Mengembalikan daftar (array) selector yang paling umum digunakan untuk tanggal publikasi.
+     * [MODIFIKASI] Mengambil daftar selector tanggal dari database.
      *
      * @return array
      */
     public function getDateSelectors(): array
     {
-        return [
-            // Tag & Atribut Standar
-            'time[datetime]',
-            'meta[property="article:published_time"]', // Atribut 'content'
-
-            // Kelas WordPress & Umum
-            '.published',
-            '.post-date',
-            '.entry-date',
-            '.meta-date',
-            'span.date',
-            'div.date',
-
-            // Struktur Umum
-            '.entry-meta .posted-on time',
-            '.info-meta li', // Kadang berisi tanggal
-            'span.posted-on',
-            'p.post-meta',
-        ];
+        return Cache::remember('suggestion_selectors_date', 3600, function () {
+            return SuggestionSelector::where('type', 'date')
+                ->orderBy('priority', 'desc')
+                ->pluck('selector')
+                ->all();
+        });
     }
 }

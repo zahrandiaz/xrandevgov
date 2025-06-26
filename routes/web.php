@@ -2,8 +2,9 @@
 
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\AccessController;
-use App\Http\Controllers\Monitoring\MonitoringSourceController; // Tambahkan ini
-use App\Http\Controllers\SelectorPresetController; // TAMBAHKAN BARIS INI
+use App\Http\Controllers\Monitoring\MonitoringSourceController;
+use App\Http\Controllers\SelectorPresetController;
+use App\Http\Controllers\SuggestionSelectorController; // [BARU] Impor controller kamus
 
 /*
 |--------------------------------------------------------------------------
@@ -27,51 +28,41 @@ Route::middleware('access.code')->group(function () {
 
     // Rute Logout
     Route::get('/logout', function (Illuminate\Http\Request $request) {
-    $request->session()->forget('authenticated_by_access_code');
-    return redirect()->route('access.form')->with('status', 'Anda telah berhasil logout.');
+        $request->session()->forget('authenticated_by_access_code');
+        return redirect()->route('access.form')->with('status', 'Anda telah berhasil logout.');
     })->name('logout');
 
     // Rute Dashboard Utama
-    Route::get('/dashboard', [MonitoringSourceController::class, 'showDashboard'])->name('dashboard'); // MODIFIKASI BARIS INI
+    Route::get('/dashboard', [MonitoringSourceController::class, 'showDashboard'])->name('dashboard');
 
     // Rute untuk Manajemen Situs Monitoring
     Route::get('/monitoring/sources', [MonitoringSourceController::class, 'index'])->name('monitoring.sources.index');
-    Route::post('/monitoring/sources', [MonitoringSourceController::class, 'store'])->name('monitoring.sources.store'); // Ini akan kita ubah fungsinya sedikit
+    Route::post('/monitoring/sources', [MonitoringSourceController::class, 'store'])->name('monitoring.sources.store');
+    Route::get('/monitoring/sources/create', [MonitoringSourceController::class, 'create'])->name('monitoring.sources.create');
+    Route::get('/monitoring/sources/{source}/edit', [MonitoringSourceController::class, 'edit'])->name('monitoring.sources.edit');
+    Route::patch('/monitoring/sources/{source}', [MonitoringSourceController::class, 'update'])->name('monitoring.sources.update');
+    Route::delete('/monitoring/sources/{source}', [MonitoringSourceController::class, 'destroy'])->name('monitoring.sources.destroy');
 
-    // Rute untuk menampilkan form tambah situs baru
-    Route::get('/monitoring/sources/create', [MonitoringSourceController::class, 'create'])->name('monitoring.sources.create'); // Tambah ini
-    // Rute untuk menampilkan form edit situs
-    Route::get('/monitoring/sources/{source}/edit', [MonitoringSourceController::class, 'edit'])->name('monitoring.sources.edit'); // Tambah ini
-    // Rute untuk update situs (pakai PATCH/PUT)
-    Route::patch('/monitoring/sources/{source}', [MonitoringSourceController::class, 'update'])->name('monitoring.sources.update'); // Tambah ini
-    // Rute untuk hapus situs
-    Route::delete('/monitoring/sources/{source}', [MonitoringSourceController::class, 'destroy'])->name('monitoring.sources.destroy'); // Tambah ini
-
-    // Rute untuk menjalankan proses crawling
+    // Rute untuk proses crawling
     Route::post('/monitoring/sources/crawl', [MonitoringSourceController::class, 'crawl'])->name('monitoring.sources.crawl');
-
-    // [BARU] Rute untuk menjalankan proses crawling SATU situs spesifik
     Route::post('/monitoring/sources/{source}/crawl-single', [MonitoringSourceController::class, 'crawlSingle'])->name('monitoring.sources.crawl_single');
 
-    // [BARU] Rute untuk menguji selector secara real-time
+    // Rute untuk fitur interaktif
     Route::post('/monitoring/sources/test-selector', [MonitoringSourceController::class, 'testSelector'])->name('monitoring.sources.testSelector');
-
-    // [BARU] Rute API untuk mendapatkan saran selector secara AJAX
     Route::post('/monitoring/sources/suggest-selectors-ajax', [MonitoringSourceController::class, 'suggestSelectorsAjax'])->name('monitoring.sources.suggest_selectors_ajax');
 
-    // [BARU] Rute untuk menampilkan daftar artikel yang di-crawl
+    // Rute untuk daftar artikel
     Route::get('/monitoring/articles', [MonitoringSourceController::class, 'listArticles'])->name('monitoring.articles.index');
-
-    // [BARU] Rute untuk MENGHAPUS satu artikel spesifik
     Route::delete('/monitoring/articles/{article}', [MonitoringSourceController::class, 'destroyArticle'])->name('monitoring.articles.destroy');
 
-    // [BARU] Rute untuk manajemen Selector Presets (CRUD)
-    Route::resource('selector-presets', SelectorPresetController::class)->except(['show']); // Tidak memerlukan metode 'show'
-
-    // [BARU] Rute untuk manajemen Wilayah (Provinsi & Kab/Kota)
+    // Rute untuk manajemen data master
+    Route::resource('selector-presets', SelectorPresetController::class)->except(['show']);
     Route::resource('regions', \App\Http\Controllers\RegionController::class)->except(['show']);
     
-    // [BARU] Rute untuk fitur impor data situs
+    // [BARU] Rute untuk manajemen Kamus Selector Saran (CRUD)
+    Route::resource('suggestion-selectors', SuggestionSelectorController::class)->except(['show']);
+
+    // Rute untuk fitur impor data
     Route::prefix('import')->name('import.')->group(function () {
         Route::get('/sources', [\App\Http\Controllers\ImportController::class, 'showSourcesForm'])->name('sources.show');
         Route::post('/sources', [\App\Http\Controllers\ImportController::class, 'handleSourcesImport'])->name('sources.handle');

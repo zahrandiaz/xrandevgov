@@ -13,14 +13,17 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        // User::factory(10)->create();
+        // Gunakan firstOrCreate untuk mencegah error duplikat
+        User::firstOrCreate(
+            ['email' => 'test@example.com'], // Kunci untuk mencari
+            ['name' => 'Test User', 'password' => bcrypt('password')] // Data untuk dibuat jika tidak ada
+        );
 
-        User::factory()->create([
-            'name' => 'Test User',
-            'email' => 'test@example.com',
-        ]);
+        // [MODIFIKASI] Ganti seeder lama dengan seeder wilayah Indonesia yang baru
+        // $this->call(RegionSeeder::class); // Seeder lama kita nonaktifkan
+        $this->call(IndonesiaRegionSeeder::class); // Memanggil seeder baru yang lebih lengkap
 
-        // Panggil RegionSeeder
-        $this->call(RegionSeeder::class);
+        // Panggil Seeder Kamus Selector
+        $this->call(SuggestionSelectorSeeder::class);
     }
 }
