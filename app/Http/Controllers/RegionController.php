@@ -98,13 +98,24 @@ class RegionController extends Controller
     }
 
     /**
-     * Remove the specified resource from storage.
+     * [MODIFIKASI] Remove the specified resource from storage with protection.
      */
     public function destroy(Region $region)
     {
-        // Logika sederhana untuk menghapus.
-        // Karena kita sudah mengatur onDelete('cascade') di migrasi,
-        // jika provinsi dihapus, semua kab/kota anaknya akan ikut terhapus.
+        // [BARU] Logika Proteksi
+        // Cek jika wilayah yang akan dihapus memiliki relasi dengan monitoring_sources.
+        if ($region->monitoringSources()->exists()) {
+            return redirect()->route('regions.index')
+                             ->with('error', "Gagal menghapus '{$region->name}' karena masih terhubung dengan situs monitoring.");
+        }
+
+        // [BARU] Proteksi tambahan untuk Provinsi: cek juga anak-anaknya.
+        if ($region->type === 'Provinsi' && $region->children()->whereHas('monitoringSources')->exists()) {
+             return redirect()->route('regions.index')
+                             ->with('error', "Gagal menghapus Provinsi '{$region->name}' karena salah satu kabupaten/kota di bawahnya masih terhubung dengan situs monitoring.");
+        }
+
+        // Jika semua pemeriksaan lolos, lanjutkan penghapusan.
         $region->delete();
 
         return redirect()->route('regions.index')

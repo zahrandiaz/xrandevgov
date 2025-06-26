@@ -15,10 +15,14 @@
                         {{ __('Manajemen Situs Monitoring') }}
                     </h2>
                     <div class="flex items-center space-x-4">
-                        <form method="POST" action="{{ route('monitoring.sources.crawl') }}">
+                        {{-- [MODIFIKASI] Tombol Crawl Semua dengan Indikator --}}
+                        <form method="POST" action="{{ route('monitoring.sources.crawl') }}" x-data="{ submitting: false }" @submit="submitting = true">
                             @csrf
-                            <button type="submit" class="bg-purple-600 text-white py-2 px-4 rounded-md hover:bg-purple-700 focus:outline-none focus:ring focus:border-purple-300">
-                                Crawl Semua Situs Aktif
+                            <button type="submit" 
+                                    :disabled="submitting"
+                                    class="bg-purple-600 text-white py-2 px-4 rounded-md hover:bg-purple-700 focus:outline-none focus:ring focus:border-purple-300 disabled:opacity-50 disabled:cursor-not-allowed">
+                                <span x-show="!submitting">Crawl Semua Situs Aktif</span>
+                                <span x-show="submitting">Mengirim Jobs...</span>
                             </button>
                         </form>
                         <a href="{{ route('monitoring.sources.create') }}" class="bg-blue-500 text-white py-2 px-4 rounded-md hover:bg-blue-600 focus:outline-none focus:ring focus:border-blue-300">
@@ -46,7 +50,6 @@
                     </div>
                     <div class="mt-2 space-y-2">
                         @foreach($uncategorizedSources as $source)
-                        {{-- [FIX] Mengembalikan blok kode yang hilang untuk menampilkan situs --}}
                         <div class="flex items-center justify-between p-3 bg-gray-50 rounded-md border">
                             <div class="flex items-center space-x-3">
                                 <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full {{ $source->is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800' }}">
@@ -58,9 +61,15 @@
                                 </div>
                             </div>
                             <div class="flex items-center space-x-3 text-sm">
-                                <form action="{{ route('monitoring.sources.crawl_single', $source) }}" method="POST" onsubmit="return confirm('Mulai crawling untuk situs {{ $source->name }}?')">
+                                {{-- [MODIFIKASI] Tombol Crawl Individual dengan Indikator --}}
+                                <form action="{{ route('monitoring.sources.crawl_single', $source) }}" method="POST" x-data="{ submitting: false }" @submit="submitting = true" onsubmit="return confirm('Mulai crawling untuk situs {{ $source->name }}?')">
                                     @csrf
-                                    <button type="submit" class="text-green-600 hover:text-green-900">Crawl Sekarang</button>
+                                    <button type="submit" 
+                                            :disabled="submitting"
+                                            class="text-green-600 hover:text-green-900 disabled:opacity-50 disabled:cursor-not-allowed">
+                                        <span x-show="!submitting">Crawl Sekarang</span>
+                                        <span x-show="submitting">Memproses...</span>
+                                    </button>
                                 </form>
                                 <a href="{{ route('monitoring.sources.edit', $source) }}" class="text-indigo-600 hover:text-indigo-900">Edit</a>
                             </div>
@@ -94,9 +103,15 @@
                                             </div>
                                         </div>
                                         <div class="flex items-center space-x-3 text-sm">
-                                            <form action="{{ route('monitoring.sources.crawl_single', $source) }}" method="POST" onsubmit="return confirm('Mulai crawling untuk situs {{ $source->name }}?')">
+                                            {{-- [MODIFIKASI] Tombol Crawl Individual dengan Indikator --}}
+                                            <form action="{{ route('monitoring.sources.crawl_single', $source) }}" method="POST" x-data="{ submitting: false }" @submit="submitting = true" onsubmit="return confirm('Mulai crawling untuk situs {{ $source->name }}?')">
                                                 @csrf
-                                                <button type="submit" class="text-green-600 hover:text-green-900">Crawl Sekarang</button>
+                                                <button type="submit" 
+                                                        :disabled="submitting"
+                                                        class="text-green-600 hover:text-green-900 disabled:opacity-50 disabled:cursor-not-allowed">
+                                                    <span x-show="!submitting">Crawl Sekarang</span>
+                                                    <span x-show="submitting">Memproses...</span>
+                                                </button>
                                             </form>
                                             <a href="{{ route('monitoring.sources.edit', $source) }}" class="text-indigo-600 hover:text-indigo-900">Edit</a>
                                         </div>
@@ -117,9 +132,15 @@
                                             </div>
                                         </div>
                                         <div class="flex items-center space-x-3 text-sm">
-                                            <form action="{{ route('monitoring.sources.crawl_single', $source) }}" method="POST" onsubmit="return confirm('Mulai crawling untuk situs {{ $source->name }}?')">
+                                            {{-- [MODIFIKASI] Tombol Crawl Individual dengan Indikator --}}
+                                            <form action="{{ route('monitoring.sources.crawl_single', $source) }}" method="POST" x-data="{ submitting: false }" @submit="submitting = true" onsubmit="return confirm('Mulai crawling untuk situs {{ $source->name }}?')">
                                                 @csrf
-                                                <button type="submit" class="text-green-600 hover:text-green-900">Crawl Sekarang</button>
+                                                <button type="submit" 
+                                                        :disabled="submitting"
+                                                        class="text-green-600 hover:text-green-900 disabled:opacity-50 disabled:cursor-not-allowed">
+                                                    <span x-show="!submitting">Crawl Sekarang</span>
+                                                    <span x-show="submitting">Memproses...</span>
+                                                </button>
                                             </form>
                                             <a href="{{ route('monitoring.sources.edit', $source) }}" class="text-indigo-600 hover:text-indigo-900">Edit</a>
                                         </div>

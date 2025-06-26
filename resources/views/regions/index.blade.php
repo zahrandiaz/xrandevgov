@@ -24,6 +24,13 @@
                     </div>
                 @endif
 
+                {{-- [BARU] Menambahkan blok untuk notifikasi error --}}
+                @if (session('error'))
+                    <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert">
+                        <span class="block sm:inline">{{ session('error') }}</span>
+                    </div>
+                @endif
+
                 <div class="space-y-4">
                     @forelse($provinces as $province)
                         <div class="bg-gray-50 border border-gray-200 rounded-lg p-4">
@@ -61,10 +68,9 @@
                     @endforelse
                 </div>
             </div>
-            <div class="mt-8 text-center">
-                    <a href="{{ route('dashboard') }}" class="text-blue-500 hover:underline mr-4">Kembali ke Dashboard</a>
-                    <a href="{{ route('monitoring.sources.index') }}" class="text-blue-500 hover:underline">Kembali ke Manajemen Situs</a>
-            </div>
+             <div class="mt-8 text-center">
+                    <a href="{{ route('dashboard') }}" class="text-blue-500 hover:underline">Kembali ke Dashboard</a>
+             </div>
         </div>
     </body>
 </html>
