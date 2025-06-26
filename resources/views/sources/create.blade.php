@@ -39,7 +39,6 @@
                         <input type="url" id="urlInput" name="url" value="{{ old('url') }}" required class="block w-full mt-1 border-gray-300 rounded-md shadow-sm">
                     </div>
                     
-                    {{-- [BARU] Pilihan Tipe Instansi --}}
                     <div>
                         <label for="tipe_instansi" class="block font-medium text-sm text-gray-700">Tipe Instansi</label>
                         <select name="tipe_instansi" x-model="instansi" required class="block w-full mt-1 border-gray-300 rounded-md shadow-sm">
@@ -49,10 +48,10 @@
                         </select>
                     </div>
 
-                    {{-- [BARU] Dropdown Wilayah Dinamis --}}
                     <div>
                         <label for="region_id" class="block font-medium text-sm text-gray-700">Wilayah</label>
                         <select name="region_id" required class="block w-full mt-1 border-gray-300 rounded-md shadow-sm" :disabled="!instansi">
+                            {{-- ... (Opsi wilayah tetap sama) ... --}}
                             <option value="">-- Pilih Tipe Instansi Dulu --</option>
                             <template x-if="instansi === 'BKD'">
                                 <optgroup label="Provinsi">
@@ -72,37 +71,40 @@
                     </div>
 
                     <div class="md:col-span-2">
-                        <label for="crawl_url" class="block font-medium text-sm text-gray-700">URL Crawl Spesifik</label>
+                        <label for="crawl_url" class="block font-medium text-sm text-gray-700">URL Crawl Spesifik (opsional)</label>
                         <input type="text" id="crawlUrlInput" name="crawl_url" value="{{ old('crawl_url', '/') }}" class="block w-full mt-1 border-gray-300 rounded-md shadow-sm">
                     </div>
                 </div>
 
-                <div class="mt-6 pt-6 border-t">
-                    <h3 class="text-lg font-medium">Konfigurasi Crawler (Sama seperti sebelumnya)</h3>
-                    {{-- Salin-tempel sisa form lama Anda (Preset Selector, Selector Judul, Tanggal, Link, Tombol Uji) di sini jika perlu --}}
-                    {{-- (Kode di bawah ini adalah contoh dari file lama Anda) --}}
-                     <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
-                        {{-- Preset Selector --}}
+                <div class="mt-6 pt-6 border-t" 
+                     x-data="suggestionHandler('{{ route('monitoring.sources.suggest_selectors_ajax') }}', '{{ csrf_token() }}')">
+                    <h3 class="text-lg font-medium">Konfigurasi Crawler</h3>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
                         <div class="md:col-span-2">
                             <label for="preset_selector" class="block font-medium text-sm text-gray-700">Pilih Preset Selector</label>
-                            <select id="presetSelector" class="block w-full mt-1 border-gray-300 rounded-md shadow-sm">
+                            <select id="presetSelector" @change="applyPreset($event)" class="block w-full mt-1 border-gray-300 rounded-md shadow-sm">
                                 <option value="">-- Pilih atau biarkan kosong untuk manual --</option>
                                 @foreach($presets as $preset)
-                                    <option value="{{ $preset->id }}"
-                                            data-title="{{ $preset->selector_title }}"
-                                            data-date="{{ $preset->selector_date }}"
-                                            data-link="{{ $preset->selector_link }}">
-                                        {{ $preset->name }}
-                                    </option>
+                                    <option value="{{ json_encode($preset) }}">{{ $preset->name }}</option>
                                 @endforeach
                             </select>
                         </div>
-                        {{-- Akhir Preset Selector --}}
-
+                        
                         <div class="md:col-span-2">
                             <label for="selector_title" class="block font-medium text-sm text-gray-700">Selector CSS Judul Berita</label>
                             <input type="text" id="selectorTitleInput" name="selector_title" value="{{ old('selector_title') }}" required class="block w-full mt-1 border-gray-300 rounded-md shadow-sm">
+                            
+                            {{-- [BARU] Tombol dan Area Status Saran --}}
+                            <div class="mt-2">
+                                <button @click="getSuggestion()" type="button" :disabled="isLoading" class="bg-teal-500 text-white py-2 px-4 rounded-md hover:bg-teal-600 focus:outline-none disabled:opacity-50">
+                                    <span x-show="!isLoading">Cari & Sarankan Selector</span>
+                                    <span x-show="isLoading">Menganalisis...</span>
+                                </button>
+                                <div x-show="statusMessage" x-text="statusMessage" :class="statusClass" class="mt-2 text-sm p-2 rounded-md"></div>
+                            </div>
                         </div>
+
                         <div>
                             <label for="selector_date" class="block font-medium text-sm text-gray-700">Selector CSS Tanggal Berita</glabel>
                             <input type="text" id="selectorDateInput" name="selector_date" value="{{ old('selector_date') }}" class="block w-full mt-1 border-gray-300 rounded-md shadow-sm">
@@ -111,8 +113,9 @@
                             <label for="selector_link" class="block font-medium text-sm text-gray-700">Selector CSS Link Berita</label>
                             <input type="text" id="selectorLinkInput" name="selector_link" value="{{ old('selector_link') }}" class="block w-full mt-1 border-gray-300 rounded-md shadow-sm">
                         </div>
-                        {{-- [FIX] Kembalikan Tombol Uji Selector --}}
-                        <div class="md:col-span-2 mt-4">
+                        
+                        {{-- Fitur Uji Selector Tetap Ada --}}
+                         <div class="md:col-span-2 mt-4">
                             <button type="button" id="testSelectorBtn" class="bg-indigo-500 text-white py-2 px-4 rounded-md hover:bg-indigo-600 focus:outline-none focus:ring focus:border-indigo-300">
                                 Uji Selector
                             </button>
@@ -138,7 +141,68 @@
         </div>
     </div>
 
+    {{-- [BARU] Logika JavaScript untuk Saran & Preset --}}
     <script>
+        function suggestionHandler(suggestionUrl, csrfToken) {
+            return {
+                isLoading: false,
+                statusMessage: '',
+                statusClass: '',
+
+                // Fungsi untuk menerapkan preset yang dipilih
+                applyPreset(event) {
+                    if (!event.target.value) return;
+                    const preset = JSON.parse(event.target.value);
+                    document.getElementById('selectorTitleInput').value = preset.selector_title || '';
+                    document.getElementById('selectorDateInput').value = preset.selector_date || '';
+                    document.getElementById('selectorLinkInput').value = preset.selector_link || '';
+                },
+
+                // Fungsi untuk mendapatkan saran selector via AJAX
+                getSuggestion() {
+                    const urlInput = document.getElementById('urlInput');
+                    const crawlUrlInput = document.getElementById('crawlUrlInput');
+                    const selectorTitleInput = document.getElementById('selectorTitleInput');
+                    
+                    if (!urlInput.value) {
+                        alert('URL Utama Situs wajib diisi sebelum mencari saran.');
+                        return;
+                    }
+
+                    this.isLoading = true;
+                    this.statusMessage = 'Menganalisis URL, harap tunggu...';
+                    this.statusClass = 'bg-yellow-100 text-yellow-800';
+
+                    axios.post(suggestionUrl, {
+                        url: urlInput.value,
+                        crawl_url: crawlUrlInput.value,
+                        _token: csrfToken
+                    })
+                    .then(response => {
+                        const selectors = response.data.selectors;
+                        if (selectors && selectors.length > 0) {
+                            selectorTitleInput.value = selectors[0]; // Isi dengan saran terbaik
+                            
+                            let otherSuggestions = selectors.slice(1).join(', ');
+                            this.statusMessage = `Sukses! Selector judul telah diisi.`;
+                            if (otherSuggestions) {
+                                this.statusMessage += ` Saran lain ditemukan: ${otherSuggestions}`;
+                            }
+                            this.statusClass = 'bg-green-100 text-green-800';
+                        }
+                    })
+                    .catch(error => {
+                        this.statusMessage = `Gagal: ${error.response?.data?.message || 'Terjadi kesalahan.'}`;
+                        this.statusClass = 'bg-red-100 text-red-800';
+                    })
+                    .finally(() => {
+                        this.isLoading = false;
+                    });
+                }
+            }
+        }
+
+        // Event listener lama untuk Uji Selector tetap di sini
         document.addEventListener('DOMContentLoaded', function() {
             // Event listener untuk Preset Selector
             const presetSelector = document.getElementById('presetSelector');

@@ -56,6 +56,9 @@ Route::middleware('access.code')->group(function () {
     // [BARU] Rute untuk menguji selector secara real-time
     Route::post('/monitoring/sources/test-selector', [MonitoringSourceController::class, 'testSelector'])->name('monitoring.sources.testSelector');
 
+    // [BARU] Rute API untuk mendapatkan saran selector secara AJAX
+    Route::post('/monitoring/sources/suggest-selectors-ajax', [MonitoringSourceController::class, 'suggestSelectorsAjax'])->name('monitoring.sources.suggest_selectors_ajax');
+
     // [BARU] Rute untuk menampilkan daftar artikel yang di-crawl
     Route::get('/monitoring/articles', [MonitoringSourceController::class, 'listArticles'])->name('monitoring.articles.index');
 

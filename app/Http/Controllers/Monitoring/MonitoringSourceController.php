@@ -11,6 +11,7 @@ use App\Jobs\CrawlSourceJob;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log; // Kita masih butuh Log
 use App\Services\CrawlerService; // [BARU] Impor service kita
+use App\Services\SelectorSuggestionService;
 
 class MonitoringSourceController extends Controller
 {
@@ -183,6 +184,46 @@ class MonitoringSourceController extends Controller
         }
     }
 
+    public function suggestSelectorsAjax(Request $request, CrawlerService $crawlerService, SelectorSuggestionService $suggestionService)
+    {
+        $validatedData = $request->validate([
+            'url' => 'required|url:http,https',
+            'crawl_url' => 'nullable|string',
+        ]);
+
+        $successfulTitleSelectors = [];
+        $titleSelectors = $suggestionService->getTitleSelectors();
+
+        foreach ($titleSelectors as $selector) {
+            try {
+                // Panggil crawler service hanya untuk mengecek apakah selector valid
+                $crawlerService->parseArticles(
+                    $validatedData['url'],
+                    $validatedData['crawl_url'] ?? '/',
+                    $selector,
+                    null, null
+                );
+                // Jika tidak ada exception, berarti selector ini berhasil menemukan sesuatu
+                $successfulTitleSelectors[] = $selector;
+            } catch (\Exception $e) {
+                // Abaikan exception (artinya selector tidak cocok), lanjut ke berikutnya
+                continue;
+            }
+        }
+
+        if (empty($successfulTitleSelectors)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Tidak ada selector judul yang cocok ditemukan dari kamus kami.'
+            ], 404); // 404 Not Found
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Ditemukan ' . count($successfulTitleSelectors) . ' saran selector yang valid.',
+            'selectors' => $successfulTitleSelectors
+        ]);
+    }
 
     /**
      * Perform web crawling on active monitoring sources and display results.
