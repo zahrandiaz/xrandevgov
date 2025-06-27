@@ -10,13 +10,12 @@ use App\Models\Region;
 use App\Models\SystemActivity;
 use App\Jobs\CrawlSourceJob;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Log;
 use App\Services\CrawlerService;
 use App\Services\SelectorSuggestionService;
 
 class MonitoringSourceController extends Controller
 {
-    // ... (metode index, create, store, edit, update, destroy, testSelector tetap sama) ...
+    // ... (metode index hingga suggestSelectorsAjax tetap sama persis) ...
     public function index()
     {
         $provinces = Region::where('type', 'Provinsi')
@@ -44,7 +43,7 @@ class MonitoringSourceController extends Controller
 
         return view('sources.index', compact('provinces', 'uncategorizedSources'));
     }
-    
+
     public function create()
     {
         $presets = SelectorPreset::all();
@@ -227,24 +226,32 @@ class MonitoringSourceController extends Controller
     public function crawl(Request $request)
     {
         $sources = MonitoringSource::where('is_active', true)->get();
+
         if ($sources->isEmpty()) {
             return redirect()->route('monitoring.sources.index')
-                             ->with('info', 'Tidak ada situs monitoring yang aktif untuk di-crawl.');
+                             ->with('notify', ['warning', 'Tidak ada situs monitoring yang aktif untuk di-crawl.']);
         }
+
         foreach ($sources as $source) {
             CrawlSourceJob::dispatch($source);
         }
+        
+        // [MODIFIKASI] Gunakan sistem notifikasi toast
+        $message = 'Proses crawling untuk ' . $sources->count() . ' situs aktif telah dimulai.';
         return redirect()->route('monitoring.sources.index')
-                         ->with('success', 'Proses crawling untuk ' . $sources->count() . ' situs aktif telah dimulai di latar belakang.');
+                         ->with('notify', ['info', $message]);
     }
 
     public function crawlSingle(MonitoringSource $source)
     {
         CrawlSourceJob::dispatch($source);
+        
+        // [MODIFIKASI] Gunakan sistem notifikasi toast
+        $message = "Proses crawling untuk situs '{$source->name}' telah dimulai.";
         return redirect()->route('monitoring.sources.index')
-                         ->with('success', "Proses crawling untuk situs '{$source->name}' telah dimulai di latar belakang.");
+                         ->with('notify', ['info', $message]);
     }
-
+    
     public function listArticles(Request $request)
     {
         $query = CrawledArticle::query();
