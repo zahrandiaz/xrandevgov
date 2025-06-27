@@ -16,12 +16,9 @@ use App\Services\SelectorSuggestionService;
 
 class MonitoringSourceController extends Controller
 {
-    /**
-     * Display a listing of the monitoring sources.
-     */
+    // ... (metode index, create, store, edit, update, destroy, testSelector tetap sama) ...
     public function index()
     {
-        // [MODIFIKASI] Gunakan withCount untuk menghitung relasi secara efisien
         $provinces = Region::where('type', 'Provinsi')
             ->with([
                 'monitoringSources' => function ($query) {
@@ -34,11 +31,10 @@ class MonitoringSourceController extends Controller
                     $query->with('region')->orderBy('name', 'asc');
                 }
             ])
-            ->withCount(['monitoringSources', 'children as kabkota_count']) // Hitung situs di provinsi & jumlah kab/kota
+            ->withCount(['monitoringSources', 'children as kabkota_count'])
             ->orderBy('name', 'asc')
             ->get();
             
-        // [MODIFIKASI] Hitung manual total situs per provinsi
         foreach ($provinces as $province) {
             $childrenSitesCount = MonitoringSource::whereIn('region_id', $province->children->pluck('id'))->count();
             $province->total_sites_count = $province->monitoring_sources_count + $childrenSitesCount;
@@ -48,8 +44,7 @@ class MonitoringSourceController extends Controller
 
         return view('sources.index', compact('provinces', 'uncategorizedSources'));
     }
-
-    // ... (metode-metode lain dari create hingga showDashboard tetap sama persis) ...
+    
     public function create()
     {
         $presets = SelectorPreset::all();
@@ -167,7 +162,10 @@ class MonitoringSourceController extends Controller
             return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
         }
     }
-    
+
+    /**
+     * [MODIFIKASI] Handle AJAX request to suggest selectors for a given URL for both title and date.
+     */
     public function suggestSelectorsAjax(Request $request, CrawlerService $crawlerService, SelectorSuggestionService $suggestionService)
     {
         $validatedData = $request->validate([
@@ -175,17 +173,12 @@ class MonitoringSourceController extends Controller
             'crawl_url' => 'nullable|string',
         ]);
 
+        // 1. Cari Selector Judul
         $successfulTitleSelectors = [];
         $titleSelectors = $suggestionService->getTitleSelectors();
-
         foreach ($titleSelectors as $selector) {
             try {
-                $crawlerService->parseArticles(
-                    $validatedData['url'],
-                    $validatedData['crawl_url'] ?? '/',
-                    $selector,
-                    null, null
-                );
+                $crawlerService->parseArticles($validatedData['url'], $validatedData['crawl_url'] ?? '/', $selector, null, null);
                 $successfulTitleSelectors[] = $selector;
             } catch (\Exception $e) {
                 continue;
@@ -199,26 +192,48 @@ class MonitoringSourceController extends Controller
             ], 404);
         }
 
+        // 2. [BARU] Jika Judul ditemukan, lanjutkan cari Selector Tanggal
+        $bestTitleSelector = $successfulTitleSelectors[0]; // Gunakan selector judul terbaik sebagai acuan
+        $successfulDateSelectors = [];
+        $dateSelectors = $suggestionService->getDateSelectors();
+        
+        foreach ($dateSelectors as $selector) {
+            try {
+                $articles = $crawlerService->parseArticles($validatedData['url'], $validatedData['crawl_url'] ?? '/', $bestTitleSelector, $selector, null);
+                // Cek apakah setidaknya satu artikel memiliki tanggal yang berhasil diparsing
+                $dateFound = false;
+                foreach($articles as $article) {
+                    if (!empty($article['date'])) {
+                        $dateFound = true;
+                        break;
+                    }
+                }
+                if ($dateFound) {
+                    $successfulDateSelectors[] = $selector;
+                }
+            } catch (\Exception $e) {
+                continue;
+            }
+        }
+
         return response()->json([
             'success' => true,
-            'message' => 'Ditemukan ' . count($successfulTitleSelectors) . ' saran selector yang valid.',
-            'selectors' => $successfulTitleSelectors
+            'message' => 'Analisis selesai.',
+            'title_selectors' => $successfulTitleSelectors,
+            'date_selectors' => $successfulDateSelectors // Kirim juga hasil selector tanggal
         ]);
     }
-    
+
     public function crawl(Request $request)
     {
         $sources = MonitoringSource::where('is_active', true)->get();
-
         if ($sources->isEmpty()) {
             return redirect()->route('monitoring.sources.index')
                              ->with('info', 'Tidak ada situs monitoring yang aktif untuk di-crawl.');
         }
-
         foreach ($sources as $source) {
             CrawlSourceJob::dispatch($source);
         }
-        
         return redirect()->route('monitoring.sources.index')
                          ->with('success', 'Proses crawling untuk ' . $sources->count() . ' situs aktif telah dimulai di latar belakang.');
     }
@@ -226,31 +241,24 @@ class MonitoringSourceController extends Controller
     public function crawlSingle(MonitoringSource $source)
     {
         CrawlSourceJob::dispatch($source);
-        
         return redirect()->route('monitoring.sources.index')
                          ->with('success', "Proses crawling untuk situs '{$source->name}' telah dimulai di latar belakang.");
     }
-    
+
     public function listArticles(Request $request)
     {
         $query = CrawledArticle::query();
-
         if ($keyword = $request->input('keyword')) {
             $query->where('title', 'like', "%{$keyword}%");
         }
-
         if ($startDate = $request->input('start_date')) {
             $query->whereDate('published_date', '>=', $startDate);
         }
-
         if ($endDate = $request->input('end_date')) {
             $query->whereDate('published_date', '<=', $endDate);
         }
-
         $query->with('source')->orderBy('published_date', 'desc');
-
         $articles = $query->paginate(15)->withQueryString();
-
         return view('articles.index', [
             'articles' => $articles,
             'filters' => $request->only(['keyword', 'start_date', 'end_date'])
@@ -260,7 +268,6 @@ class MonitoringSourceController extends Controller
     public function destroyArticle(CrawledArticle $article)
     {
         $article->delete();
-
         return redirect()->route('monitoring.articles.index')
                          ->with('success', 'Artikel berhasil dihapus.');
     }
@@ -286,16 +293,9 @@ class MonitoringSourceController extends Controller
         $systemActivities = SystemActivity::latest()->take(10)->get();
 
         return view('dashboard', compact(
-            'totalSources',
-            'activeSources',
-            'inactiveSources',
-            'totalArticles',
-            'newArticlesToday',
-            'newArticlesLast7Days',
-            'latestCrawls',
-            'crawlSuccessRate',
-            'problematicSources',
-            'systemActivities'
+            'totalSources', 'activeSources', 'inactiveSources', 'totalArticles',
+            'newArticlesToday', 'newArticlesLast7Days', 'latestCrawls',
+            'crawlSuccessRate', 'problematicSources', 'systemActivities'
         ));
     }
 }

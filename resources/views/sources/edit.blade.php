@@ -52,7 +52,6 @@
                     <div>
                         <label for="region_id" class="block font-medium text-sm text-gray-700">Wilayah</label>
                         <select name="region_id" required class="block w-full mt-1 border-gray-300 rounded-md shadow-sm" :disabled="!instansi">
-                            {{-- ... (Opsi wilayah tetap sama) ... --}}
                             <option value="">-- Pilih Tipe Instansi Dulu --</option>
                             <template x-if="instansi === 'BKD'">
                                 <optgroup label="Provinsi">
@@ -85,7 +84,11 @@
                 </div>
                 
                 <div class="mt-6 pt-6 border-t"
-                     x-data="suggestionHandler('{{ route('monitoring.sources.suggest_selectors_ajax') }}', '{{ csrf_token() }}')">
+                     x-data="formHandler(
+                        '{{ route('monitoring.sources.suggest_selectors_ajax') }}',
+                        '{{ route('monitoring.sources.testSelector') }}',
+                        '{{ csrf_token() }}'
+                     )">
                     <h3 class="text-lg font-medium">Konfigurasi Crawler</h3>
                      <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
                         <div class="md:col-span-2">
@@ -97,38 +100,33 @@
                                 @endforeach
                             </select>
                         </div>
-                        <div class="md:col-span-2">
+                        <div class="md:col-span-2 space-y-2">
                             <label for="selector_title" class="block font-medium text-sm text-gray-700">Selector CSS Judul Berita</label>
-                            <input type="text" id="selectorTitleInput" name="selector_title" value="{{ old('selector_title', $source->selector_title) }}" required class="block w-full mt-1 border-gray-300 rounded-md shadow-sm">
-
-                            {{-- [BARU] Tombol dan Area Status Saran --}}
-                            <div class="mt-2">
-                                <button @click="getSuggestion()" type="button" :disabled="isLoading" class="bg-teal-500 text-white py-2 px-4 rounded-md hover:bg-teal-600 focus:outline-none disabled:opacity-50">
-                                    <span x-show="!isLoading">Cari & Sarankan Selector</span>
-                                    <span x-show="isLoading">Menganalisis...</span>
-                                </button>
-                                <div x-show="statusMessage" x-text="statusMessage" :class="statusClass" class="mt-2 text-sm p-2 rounded-md"></div>
-                            </div>
+                            <input type="text" id="selectorTitleInput" name="selector_title" value="{{ old('selector_title', $source->selector_title) }}" required class="block w-full border-gray-300 rounded-md shadow-sm">
                         </div>
-                        <div>
+                        <div class="space-y-2">
                             <label for="selector_date" class="block font-medium text-sm text-gray-700">Selector CSS Tanggal Berita</glabel>
-                            <input type="text" id="selectorDateInput" name="selector_date" value="{{ old('selector_date', $source->selector_date) }}" class="block w-full mt-1 border-gray-300 rounded-md shadow-sm">
+                            <input type="text" id="selectorDateInput" name="selector_date" value="{{ old('selector_date', $source->selector_date) }}" class="block w-full border-gray-300 rounded-md shadow-sm">
                         </div>
-                        <div>
+                        <div class="space-y-2">
                             <label for="selector_link" class="block font-medium text-sm text-gray-700">Selector CSS Link Berita</label>
-                            <input type="text" id="selectorLinkInput" name="selector_link" value="{{ old('selector_link', $source->selector_link) }}" class="block w-full mt-1 border-gray-300 rounded-md shadow-sm">
+                            <input type="text" id="selectorLinkInput" name="selector_link" value="{{ old('selector_link', $source->selector_link) }}" class="block w-full border-gray-300 rounded-md shadow-sm">
                         </div>
-                        
-                        <div class="md:col-span-2 mt-4">
-                            <button type="button" id="testSelectorBtn" class="bg-indigo-500 text-white py-2 px-4 rounded-md hover:bg-indigo-600 focus:outline-none focus:ring focus:border-indigo-300">
-                                Uji Selector
-                            </button>
-                            <div id="testResultArea" class="mt-4 p-4 border rounded-md hidden">
-                                {{-- ... (Kode Uji Selector tidak berubah) ... --}}
-                                <div id="testLoadingIndicator" class="hidden flex items-center text-gray-700">
-                                    <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-indigo-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-                                    <span>Menguji selector, harap tunggu...</span>
-                                </div>
+
+                        {{-- [MODIFIKASI] Area Tombol Aksi --}}
+                        <div class="md:col-span-2 mt-4 space-y-4">
+                            <div class="flex items-center space-x-4">
+                                <button @click="getSuggestion()" type="button" :disabled="suggestionLoading" class="bg-teal-500 text-white py-2 px-4 rounded-md hover:bg-teal-600 focus:outline-none disabled:opacity-50">
+                                    <span x-show="!suggestionLoading">Sarankan Selector</span>
+                                    <span x-show="suggestionLoading">Menganalisis...</span>
+                                </button>
+                                <button @click="testSelectors()" type="button" :disabled="testLoading" class="bg-indigo-500 text-white py-2 px-4 rounded-md hover:bg-indigo-600 focus:outline-none disabled:opacity-50">
+                                    <span x-show="!testLoading">Uji Selector</span>
+                                    <span x-show="testLoading">Menguji...</span>
+                                </button>
+                            </div>
+                            <div x-show="statusMessage" x-text="statusMessage" :class="statusClass" class="text-sm p-2 rounded-md transition-all duration-300" style="display: none;"></div>
+                            <div id="testResultArea" class="mt-2 p-4 border rounded-md" x-show="showTestResult" style="display: none;">
                                 <div id="testResultMessage" class="text-sm font-semibold mb-2"></div>
                                 <ul id="testArticleList" class="list-disc list-inside text-sm text-gray-700"></ul>
                             </div>
@@ -146,39 +144,40 @@
         </div>
     </div>
     
-    {{-- [BARU] Logika JavaScript untuk Saran & Preset --}}
     <script>
-        function suggestionHandler(suggestionUrl, csrfToken) {
+        function formHandler(suggestionUrl, testUrl, csrfToken) {
             return {
-                isLoading: false,
+                suggestionLoading: false,
+                testLoading: false,
                 statusMessage: '',
                 statusClass: '',
+                showTestResult: false,
 
-                // Fungsi untuk menerapkan preset yang dipilih
                 applyPreset(event) {
                     if (!event.target.value) return;
-                    // Di file edit, kita perlu mengubah dari id ke json
-                    const selectedOption = event.target.options[event.target.selectedIndex];
-                    const data = JSON.parse(selectedOption.value);
-                    document.getElementById('selectorTitleInput').value = data.selector_title || '';
-                    document.getElementById('selectorDateInput').value = data.selector_date || '';
-                    document.getElementById('selectorLinkInput').value = data.selector_link || '';
+                    const preset = JSON.parse(event.target.value);
+                    document.getElementById('selectorTitleInput').value = preset.selector_title || '';
+                    document.getElementById('selectorDateInput').value = preset.selector_date || '';
+                    document.getElementById('selectorLinkInput').value = preset.selector_link || '';
                 },
 
-                // Fungsi untuk mendapatkan saran selector via AJAX
                 getSuggestion() {
                     const urlInput = document.getElementById('urlInput');
                     const crawlUrlInput = document.getElementById('crawlUrlInput');
                     const selectorTitleInput = document.getElementById('selectorTitleInput');
+                    const selectorDateInput = document.getElementById('selectorDateInput');
                     
                     if (!urlInput.value) {
                         alert('URL Utama Situs wajib diisi sebelum mencari saran.');
                         return;
                     }
 
-                    this.isLoading = true;
+                    this.suggestionLoading = true;
                     this.statusMessage = 'Menganalisis URL, harap tunggu...';
                     this.statusClass = 'bg-yellow-100 text-yellow-800';
+                    this.showTestResult = false;
+                    selectorTitleInput.value = '';
+                    selectorDateInput.value = '';
 
                     axios.post(suggestionUrl, {
                         url: urlInput.value,
@@ -186,117 +185,79 @@
                         _token: csrfToken
                     })
                     .then(response => {
-                        const selectors = response.data.selectors;
-                        if (selectors && selectors.length > 0) {
-                            selectorTitleInput.value = selectors[0]; // Isi dengan saran terbaik
-                            
-                            let otherSuggestions = selectors.slice(1).join(', ');
-                            this.statusMessage = `Sukses! Selector judul telah diisi.`;
-                            if (otherSuggestions) {
-                                this.statusMessage += ` Saran lain ditemukan: ${otherSuggestions}`;
-                            }
-                            this.statusClass = 'bg-green-100 text-green-800';
+                        const titleSelectors = response.data.title_selectors;
+                        const dateSelectors = response.data.date_selectors;
+                        let messages = [];
+
+                        if (titleSelectors && titleSelectors.length > 0) {
+                            selectorTitleInput.value = titleSelectors[0];
+                            messages.push('Selector judul ditemukan dan diisi.');
+                        } else {
+                            messages.push('Selector judul tidak ditemukan.');
                         }
+
+                        if (dateSelectors && dateSelectors.length > 0) {
+                            selectorDateInput.value = dateSelectors[0];
+                            messages.push('Selector tanggal juga ditemukan dan diisi.');
+                        }
+
+                        this.statusMessage = 'Analisis selesai. ' + messages.join(' ');
+                        this.statusClass = 'bg-green-100 text-green-800';
                     })
                     .catch(error => {
                         this.statusMessage = `Gagal: ${error.response?.data?.message || 'Terjadi kesalahan.'}`;
                         this.statusClass = 'bg-red-100 text-red-800';
                     })
                     .finally(() => {
-                        this.isLoading = false;
+                        this.suggestionLoading = false;
+                    });
+                },
+
+                testSelectors() {
+                    const urlInput = document.getElementById('urlInput');
+                    const crawlUrlInput = document.getElementById('crawlUrlInput');
+                    const selectorTitleInput = document.getElementById('selectorTitleInput');
+                    const selectorDateInput = document.getElementById('selectorDateInput');
+                    const selectorLinkInput = document.getElementById('selectorLinkInput');
+                    const testResultMessage = document.getElementById('testResultMessage');
+                    const testArticleList = document.getElementById('testArticleList');
+
+                    if (!urlInput.value || !selectorTitleInput.value) {
+                        alert('URL dan Selector Judul wajib diisi untuk pengujian.');
+                        return;
+                    }
+
+                    this.testLoading = true;
+                    this.showTestResult = true;
+                    testResultMessage.textContent = 'Menguji...';
+                    testArticleList.innerHTML = '';
+                    this.statusMessage = '';
+
+                    axios.post(testUrl, {
+                        url: urlInput.value,
+                        crawl_url: crawlUrlInput.value,
+                        selector_title: selectorTitleInput.value,
+                        selector_date: selectorDateInput.value,
+                        selector_link: selectorLinkInput.value,
+                        _token: csrfToken
+                    })
+                    .then(response => {
+                        testResultMessage.textContent = `Berhasil! ${response.data.message || 'Ditemukan ' + response.data.articles.length + ' artikel.'}`;
+                        response.data.articles.forEach(article => {
+                            const listItem = document.createElement('li');
+                            listItem.innerHTML = `<strong>${article.title || 'Tanpa Judul'}</strong> (${article.date || 'Tanpa Tanggal'})`;
+                            testArticleList.appendChild(listItem);
+                        });
+                    })
+                    .catch(error => {
+                        testResultMessage.textContent = `Gagal: ${error.response?.data?.message || error.message}`;
+                    })
+                    .finally(() => {
+                        this.testLoading = false;
                     });
                 }
             }
         }
-        
-        // Event listener lama untuk Uji Selector tetap di sini
-        document.addEventListener('DOMContentLoaded', function() {
-            // ... (Kode untuk 'testSelectorBtn' tetap sama seperti sebelumnya)
-            // Saya juga mereplikasi perbaikan logika preset selector dari create.blade.php
-            const presetSelector = document.getElementById('presetSelector');
-            presetSelector.addEventListener('change', function() {
-                const selectedOption = this.options[this.selectedIndex];
-                if (!selectedOption.value) return; // Guard clause jika memilih opsi default
-                
-                try {
-                    const data = JSON.parse(selectedOption.value);
-                    document.getElementById('selectorTitleInput').value = data.selector_title || '';
-                    document.getElementById('selectorDateInput').value = data.selector_date || '';
-                    document.getElementById('selectorLinkInput').value = data.selector_link || '';
-                } catch(e) {
-                    console.error("Gagal mem-parsing data preset:", e);
-                    // Opsi ini adalah dari versi lama yang mungkin masih ada, kita abaikan
-                    document.getElementById('selectorTitleInput').value = selectedOption.dataset.title || '';
-                    document.getElementById('selectorDateInput').value = selectedOption.dataset.date || '';
-                    document.getElementById('selectorLinkInput').value = selectedOption.dataset.link || '';
-                }
-            });
-
-            // Event listener untuk Tombol Uji Selector
-            const testSelectorBtn = document.getElementById('testSelectorBtn');
-            testSelectorBtn.addEventListener('click', function() {
-                // ... (Logika testSelector tetap sama persis)
-                 const urlInput = document.getElementById('urlInput');
-                const crawlUrlInput = document.getElementById('crawlUrlInput');
-                const selectorTitleInput = document.getElementById('selectorTitleInput');
-                const selectorDateInput = document.getElementById('selectorDateInput');
-                const selectorLinkInput = document.getElementById('selectorLinkInput');
-                const testResultArea = document.getElementById('testResultArea');
-                const testLoadingIndicator = document.getElementById('testLoadingIndicator');
-                const testResultMessage = document.getElementById('testResultMessage');
-                const testArticleList = document.getElementById('testArticleList');
-
-                const url = urlInput.value;
-                const crawl_url = crawlUrlInput.value;
-                const selector_title = selectorTitleInput.value;
-                const selector_date = selectorDateInput.value;
-                const selector_link = selectorLinkInput.value;
-
-                testResultArea.classList.add('hidden');
-                testResultMessage.textContent = '';
-                testArticleList.innerHTML = '';
-                testLoadingIndicator.classList.remove('hidden');
-                testSelectorBtn.disabled = true;
-
-                if (!url || !selector_title) {
-                    testResultMessage.textContent = 'URL Utama Situs dan Selector Judul Berita wajib diisi untuk pengujian.';
-                    testResultArea.classList.remove('hidden');
-                    testLoadingIndicator.classList.add('hidden');
-                    testSelectorBtn.disabled = false;
-                    return;
-                }
-
-                let fullUrl = url;
-                if (!/^https?:\/\//i.test(fullUrl)) {
-                    fullUrl = "https://" + fullUrl;
-                }
-
-                axios.post('{{ route('monitoring.sources.testSelector') }}', {
-                    url: fullUrl, crawl_url, selector_title, selector_date, selector_link
-                })
-                .then(function (response) {
-                    testResultArea.classList.remove('hidden');
-                    if (response.data.success && response.data.articles.length > 0) {
-                        testResultMessage.textContent = `Berhasil! ${response.data.message || 'Ditemukan ' + response.data.articles.length + ' artikel.'}`;
-                        response.data.articles.forEach(article => {
-                            const listItem = document.createElement('li');
-                            listItem.innerHTML = '<strong>' + (article.title || 'Tanpa Judul') + '</strong> (' + (article.date || 'Tanpa Tanggal') + ') - <a href="' + article.link + '" target="_blank" class="text-blue-700 hover:underline">Lihat</a>';
-                            testArticleList.appendChild(listItem);
-                        });
-                    } else {
-                        testResultMessage.textContent = `Selesai, namun tidak ada artikel ditemukan. Pesan: ${response.data.message || 'Periksa kembali selector atau URL.'}`;
-                    }
-                })
-                .catch(function (error) {
-                    testResultArea.classList.remove('hidden');
-                    testResultMessage.textContent = `Gagal: ${error.response?.data?.message || error.message}`;
-                })
-                .finally(function() {
-                    testLoadingIndicator.classList.add('hidden');
-                    testSelectorBtn.disabled = false;
-                });
-            });
-        });
     </script>
 </body>
 </html>

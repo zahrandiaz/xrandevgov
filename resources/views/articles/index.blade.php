@@ -15,6 +15,7 @@
 
                 {{-- Form Pencarian dan Filter --}}
                 <div class="mb-6 bg-gray-50 p-4 rounded-lg border">
+                    {{-- ... (Isi form pencarian tetap sama) ... --}}
                     <form action="{{ route('monitoring.articles.index') }}" method="GET" class="space-y-4">
                         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                             <div>
@@ -63,20 +64,31 @@
                                     <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sumber</th>
                                     <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tanggal Publikasi</th>
                                     <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Waktu Crawl</th>
-                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Aksi</th> {{-- [BARU] Kolom Aksi --}}
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Aksi</th>
                                 </tr>
                             </thead>
                             <tbody class="bg-white divide-y divide-gray-200">
                                 @foreach($articles as $article)
                                     <tr>
                                         <td class="px-6 py-4 text-sm font-medium text-gray-900">
-                                            <div class="max-w-md">{{ $article->title }}</div>
+                                            {{-- [MODIFIKASI] Batasi panjang judul dan tambahkan tooltip --}}
+                                            <div class="max-w-md" title="{{ $article->title }}">
+                                                {{ Str::limit($article->title, 70) }}
+                                            </div>
                                         </td>
-                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ $article->source->name ?? 'N/A' }}</td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                            {{-- [MODIFIKASI] Jadikan nama sumber sebagai link --}}
+                                            @if($article->source)
+                                                <a href="{{ route('monitoring.sources.edit', $article->source) }}" class="text-indigo-600 hover:underline">
+                                                    {{ $article->source->name }}
+                                                </a>
+                                            @else
+                                                N/A
+                                            @endif
+                                        </td>
                                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ $article->published_date?->format('Y-m-d') ?? 'Tidak Diketahui' }}</td>
                                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ $article->crawled_at?->format('Y-m-d H:i') ?? 'N/A' }}</td>
                                         <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                                            {{-- [BARU] Tombol Lihat dan Hapus --}}
                                             <div class="flex items-center space-x-4">
                                                 <a href="{{ $article->url }}" target="_blank" class="text-blue-600 hover:text-blue-900">Lihat</a>
                                                 <form action="{{ route('monitoring.articles.destroy', $article->id) }}" method="POST" onsubmit="return confirm('Apakah Anda yakin ingin menghapus artikel ini?')">
@@ -92,7 +104,6 @@
                         </table>
                     </div>
 
-                    {{-- Paginasi --}}
                     <div class="mt-4">
                         {{ $articles->links('pagination::tailwind') }}
                     </div>
