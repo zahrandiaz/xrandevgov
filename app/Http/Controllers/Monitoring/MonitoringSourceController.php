@@ -7,19 +7,21 @@ use App\Models\MonitoringSource;
 use App\Models\SelectorPreset;
 use App\Models\CrawledArticle;
 use App\Models\Region;
+use App\Models\SystemActivity;
 use App\Jobs\CrawlSourceJob;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Log; // Kita masih butuh Log
-use App\Services\CrawlerService; // [BARU] Impor service kita
+use Illuminate\Support\Facades\Log;
+use App\Services\CrawlerService;
 use App\Services\SelectorSuggestionService;
 
 class MonitoringSourceController extends Controller
 {
     /**
-     * Display a listing of the monitoring sources and a link to add new.
+     * Display a listing of the monitoring sources.
      */
     public function index()
     {
+        // [MODIFIKASI] Gunakan withCount untuk menghitung relasi secara efisien
         $provinces = Region::where('type', 'Provinsi')
             ->with([
                 'monitoringSources' => function ($query) {
@@ -27,22 +29,27 @@ class MonitoringSourceController extends Controller
                 },
                 'children' => function ($query) {
                     $query->orderBy('name', 'asc');
-                }, 
+                },
                 'children.monitoringSources' => function ($query) {
                     $query->with('region')->orderBy('name', 'asc');
                 }
             ])
+            ->withCount(['monitoringSources', 'children as kabkota_count']) // Hitung situs di provinsi & jumlah kab/kota
             ->orderBy('name', 'asc')
             ->get();
-        
+            
+        // [MODIFIKASI] Hitung manual total situs per provinsi
+        foreach ($provinces as $province) {
+            $childrenSitesCount = MonitoringSource::whereIn('region_id', $province->children->pluck('id'))->count();
+            $province->total_sites_count = $province->monitoring_sources_count + $childrenSitesCount;
+        }
+
         $uncategorizedSources = MonitoringSource::whereNull('region_id')->orderBy('name', 'asc')->get();
-        
+
         return view('sources.index', compact('provinces', 'uncategorizedSources'));
     }
 
-    /**
-     * Show the form for creating a new monitoring source.
-     */
+    // ... (metode-metode lain dari create hingga showDashboard tetap sama persis) ...
     public function create()
     {
         $presets = SelectorPreset::all();
@@ -52,9 +59,6 @@ class MonitoringSourceController extends Controller
         return view('sources.create', compact('presets', 'provinces', 'kabkotas'));
     }
 
-    /**
-     * Store a newly created monitoring source in storage (from create form).
-     */
     public function store(Request $request)
     {
         $validatedData = $request->validate([
@@ -85,9 +89,6 @@ class MonitoringSourceController extends Controller
         return redirect()->route('monitoring.sources.index')->with('success', 'Situs monitoring berhasil ditambahkan!');
     }
 
-    /**
-     * Show the form for editing the specified monitoring source.
-     */
     public function edit(MonitoringSource $source)
     {
         $presets = SelectorPreset::all();
@@ -97,9 +98,6 @@ class MonitoringSourceController extends Controller
         return view('sources.edit', compact('source', 'presets', 'provinces', 'kabkotas'));
     }
 
-    /**
-     * Update the specified monitoring source in storage.
-     */
     public function update(Request $request, MonitoringSource $source)
     {
         $validatedData = $request->validate([
@@ -131,26 +129,15 @@ class MonitoringSourceController extends Controller
         return redirect()->route('monitoring.sources.index')->with('success', 'Situs monitoring berhasil diperbarui!');
     }
 
-    /**
-     * Remove the specified monitoring source from storage.
-     */
     public function destroy(MonitoringSource $source)
     {
         $source->delete();
         return redirect()->route('monitoring.sources.index')
                          ->with('success', 'Situs monitoring berhasil dihapus!');
     }
-
-    /**
-     * [REFAKTOR] Test given selectors by using the centralized CrawlerService.
-     *
-     * @param  \Illuminate\Http\Request  $request
-     * @param  \App\Services\CrawlerService $crawlerService
-     * @return \Illuminate\Http\JsonResponse
-     */
+    
     public function testSelector(Request $request, CrawlerService $crawlerService)
     {
-        // [REFAKTOR] Hapus validasi 'ends_with:.go.id' untuk konsistensi
         $validatedData = $request->validate([
             'url' => 'required|url:http,https',
             'crawl_url' => 'nullable|string',
@@ -160,7 +147,6 @@ class MonitoringSourceController extends Controller
         ]);
 
         try {
-            // Panggil service untuk melakukan pekerjaan berat
             $sampleArticles = $crawlerService->parseArticles(
                 $validatedData['url'],
                 $validatedData['crawl_url'] ?? '/',
@@ -169,7 +155,6 @@ class MonitoringSourceController extends Controller
                 $validatedData['selector_link']
             );
             
-            // Batasi hasil hanya untuk 3 sampel di frontend
             $sampleArticles = array_slice($sampleArticles, 0, 3);
 
             return response()->json([
@@ -179,11 +164,10 @@ class MonitoringSourceController extends Controller
             ]);
 
         } catch (\Exception $e) {
-            // Tangkap semua jenis exception dari CrawlerService
-            return response()->json(['success' => false, 'message' => $e->getMessage()], 422); // 422 Unprocessable Entity
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
         }
     }
-
+    
     public function suggestSelectorsAjax(Request $request, CrawlerService $crawlerService, SelectorSuggestionService $suggestionService)
     {
         $validatedData = $request->validate([
@@ -196,17 +180,14 @@ class MonitoringSourceController extends Controller
 
         foreach ($titleSelectors as $selector) {
             try {
-                // Panggil crawler service hanya untuk mengecek apakah selector valid
                 $crawlerService->parseArticles(
                     $validatedData['url'],
                     $validatedData['crawl_url'] ?? '/',
                     $selector,
                     null, null
                 );
-                // Jika tidak ada exception, berarti selector ini berhasil menemukan sesuatu
                 $successfulTitleSelectors[] = $selector;
             } catch (\Exception $e) {
-                // Abaikan exception (artinya selector tidak cocok), lanjut ke berikutnya
                 continue;
             }
         }
@@ -215,7 +196,7 @@ class MonitoringSourceController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Tidak ada selector judul yang cocok ditemukan dari kamus kami.'
-            ], 404); // 404 Not Found
+            ], 404);
         }
 
         return response()->json([
@@ -224,10 +205,7 @@ class MonitoringSourceController extends Controller
             'selectors' => $successfulTitleSelectors
         ]);
     }
-
-    /**
-     * Perform web crawling on active monitoring sources and display results.
-     */
+    
     public function crawl(Request $request)
     {
         $sources = MonitoringSource::where('is_active', true)->get();
@@ -247,23 +225,16 @@ class MonitoringSourceController extends Controller
 
     public function crawlSingle(MonitoringSource $source)
     {
-        // Langsung kirim job untuk satu situs ini ke queue
         CrawlSourceJob::dispatch($source);
         
-        // Kembali ke halaman index dengan pesan sukses yang spesifik
         return redirect()->route('monitoring.sources.index')
                          ->with('success', "Proses crawling untuk situs '{$source->name}' telah dimulai di latar belakang.");
     }
-
-    /**
-     * Display a listing of crawled articles.
-     */
+    
     public function listArticles(Request $request)
     {
-        // 1. Mulai query builder
         $query = CrawledArticle::query();
 
-        // 2. Terapkan filter berdasarkan input dari request
         if ($keyword = $request->input('keyword')) {
             $query->where('title', 'like', "%{$keyword}%");
         }
@@ -276,25 +247,20 @@ class MonitoringSourceController extends Controller
             $query->whereDate('published_date', '<=', $endDate);
         }
 
-        // 3. Eager load relasi dan urutkan hasilnya
         $query->with('source')->orderBy('published_date', 'desc');
 
-        // 4. Lakukan paginasi, dan pastikan parameter pencarian tetap ada di link paginasi
         $articles = $query->paginate(15)->withQueryString();
 
-        // 5. Kirim data artikel dan input pencarian ke view
         return view('articles.index', [
             'articles' => $articles,
-            'filters' => $request->only(['keyword', 'start_date', 'end_date']) // Untuk mengisi ulang form
+            'filters' => $request->only(['keyword', 'start_date', 'end_date'])
         ]);
     }
 
     public function destroyArticle(CrawledArticle $article)
     {
-        // Hapus data artikel dari database
         $article->delete();
 
-        // Kembali ke halaman daftar artikel dengan pesan sukses
         return redirect()->route('monitoring.articles.index')
                          ->with('success', 'Artikel berhasil dihapus.');
     }
@@ -316,11 +282,20 @@ class MonitoringSourceController extends Controller
         $problematicSources = MonitoringSource::where('consecutive_failures', '>=', 3)
                                               ->orderBy('consecutive_failures', 'desc')
                                               ->get();
+        
+        $systemActivities = SystemActivity::latest()->take(10)->get();
 
         return view('dashboard', compact(
-            'totalSources', 'activeSources', 'inactiveSources', 'totalArticles',
-            'newArticlesToday', 'newArticlesLast7Days', 'latestCrawls',
-            'crawlSuccessRate', 'problematicSources'
+            'totalSources',
+            'activeSources',
+            'inactiveSources',
+            'totalArticles',
+            'newArticlesToday',
+            'newArticlesLast7Days',
+            'latestCrawls',
+            'crawlSuccessRate',
+            'problematicSources',
+            'systemActivities'
         ));
     }
 }

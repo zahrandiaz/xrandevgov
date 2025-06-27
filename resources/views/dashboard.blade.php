@@ -31,7 +31,6 @@
                     <a href="{{ route('selector-presets.index') }}" class="bg-gray-700 text-white p-4 rounded-lg shadow hover:bg-gray-800 text-center flex items-center justify-center">
                         <span class="font-semibold">Manajemen Preset</span>
                     </a>
-                    {{-- [BARU] Tombol untuk Manajemen Kamus --}}
                     <a href="{{ route('suggestion-selectors.index') }}" class="bg-orange-500 text-white p-4 rounded-lg shadow hover:bg-orange-600 text-center flex items-center justify-center">
                         <span class="font-semibold">Manajemen Kamus</span>
                     </a>
@@ -41,7 +40,6 @@
                 </div>
             </div>
 
-            {{-- Seksi Statistik --}}
             <div class="pt-6 border-t">
                  <h2 class="text-xl font-semibold text-center text-gray-800 mb-4">Statistik Sistem</h2>
                 <div class="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -64,7 +62,6 @@
                 </div>
             </div>
 
-            {{-- Seksi Crawling & Situs Bermasalah --}}
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 pt-6 border-t">
                 @if($latestCrawls->isNotEmpty())
                     <div>
@@ -99,6 +96,33 @@
                         </div>
                     </div>
                 @endif
+            </div>
+            
+            {{-- [BARU] Seksi Log Aktivitas Sistem --}}
+            <div class="pt-6 border-t">
+                <h2 class="text-xl font-semibold text-center text-gray-800 mb-4">Log Aktivitas Terbaru</h2>
+                <div class="space-y-3">
+                    @forelse($systemActivities as $activity)
+                        <div class="flex items-start p-3 rounded-lg
+                            @switch($activity->level)
+                                @case('success') bg-green-50 border-l-4 border-green-400 @break
+                                @case('warning') bg-yellow-50 border-l-4 border-yellow-400 @break
+                                @case('error')   bg-red-50 border-l-4 border-red-400 @break
+                                @default        bg-blue-50 border-l-4 border-blue-400
+                            @endswitch">
+                            <div class="ml-3 flex-1">
+                                <p class="text-sm text-gray-800">{{ $activity->message }}</p>
+                                <p class="text-xs text-gray-500 mt-1">
+                                    {{ $activity->created_at->diffForHumans() }}
+                                </p>
+                            </div>
+                        </div>
+                    @empty
+                        <div class="text-center text-gray-500 py-4">
+                            <p>Belum ada aktivitas sistem yang tercatat.</p>
+                        </div>
+                    @endforelse
+                </div>
             </div>
 
         </div>

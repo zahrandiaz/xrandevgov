@@ -20,6 +20,19 @@
                         <span class="block sm:inline">{{ session('success') }}</span>
                     </div>
                 @endif
+                
+                {{-- [BARU] Menampilkan laporan detail baris yang dilewati --}}
+                @if (session('skipped_rows') && !empty(session('skipped_rows')))
+                    <div class="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 mb-4" role="alert">
+                        <p class="font-bold">Beberapa baris dilewati dengan detail berikut:</p>
+                        <ul class="mt-2 list-disc list-inside text-sm">
+                            @foreach (session('skipped_rows') as $skipped_row)
+                                <li>{{ $skipped_row }}</li>
+                            @endforeach
+                        </ul>
+                    </div>
+                @endif
+
                 @if (session('error'))
                      <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert">
                         <strong class="font-bold">Error!</strong>
@@ -39,16 +52,16 @@
 
 
                 {{-- Petunjuk Penggunaan --}}
-                    <div class="mb-6 bg-blue-50 border-l-4 border-blue-400 p-4">
-                        <h4 class="font-bold text-lg text-gray-800">Petunjuk Penggunaan:</h4>
-                        <ol class="list-decimal list-inside mt-2 text-gray-700 space-y-1">
-                            <li>Gunakan file CSV dengan header yang sesuai. Header wajib: <strong>`nama_situs`</strong>, <strong>`url_situs`</strong>, <strong>`nama_wilayah`</strong>, dan <strong>`tipe_instansi`</strong>.</li>
-                            <li>Kolom <strong>`tipe_instansi`</strong> harus diisi dengan `BKD` atau `BKPSDM` (huruf besar/kecil tidak masalah).</li>
-                            <li>Kolom <strong>`nama_wilayah`</strong> harus berisi nama Provinsi atau Kab/Kota yang <strong>sudah ada</strong> di database.</li>
-                            <li>Pastikan ada kesesuaian: `BKD` harus dengan wilayah Provinsi, dan `BKPSDM` dengan wilayah Kabupaten/Kota.</li>
-                            <li>Kolom opsional: <strong>`url_crawl`</strong>, <strong>`selector_title`</strong>, <strong>`selector_date`</strong>, <strong>`selector_link`</strong>.</li>
-                        </ol>
-                    </div>
+                <div class="mb-6 bg-blue-50 border-l-4 border-blue-400 p-4">
+                    <h4 class="font-bold text-lg text-gray-800">Petunjuk Penggunaan:</h4>
+                    <ol class="list-decimal list-inside mt-2 text-gray-700 space-y-1">
+                        <li>Gunakan file CSV dengan header yang sesuai. Header wajib: <strong>`nama_situs`</strong>, <strong>`url_situs`</strong>, <strong>`nama_wilayah`</strong>, dan <strong>`tipe_instansi`</strong>.</li>
+                        <li>Kolom <strong>`tipe_instansi`</strong> harus diisi dengan `BKD` atau `BKPSDM` (huruf besar/kecil tidak masalah).</li>
+                        <li>Kolom <strong>`nama_wilayah`</strong> harus berisi nama Provinsi atau Kab/Kota yang <strong>sudah ada</strong> di database.</li>
+                        <li>Pastikan ada kesesuaian: `BKD` harus dengan wilayah Provinsi, dan `BKPSDM` dengan wilayah Kabupaten/Kota.</li>
+                        <li>Kolom opsional: <strong>`url_crawl`</strong>, <strong>`selector_title`</strong>, <strong>`selector_date`</strong>, <strong>`selector_link`</strong>.</li>
+                    </ol>
+                </div>
 
                 {{-- Form Upload --}}
                 <form action="{{ route('import.sources.handle') }}" method="POST" enctype="multipart/form-data">
@@ -68,10 +81,10 @@
                 </form>
 
             </div>
-            <div class="mt-8 text-center">
-                    <a href="{{ route('dashboard') }}" class="text-blue-500 hover:underline mr-4">Kembali ke Dashboard</a>
-                    <a href="{{ route('monitoring.sources.index') }}" class="text-blue-500 hover:underline">Kembali ke Manajemen Situs</a>
-                </div>
+             <div class="mt-8 text-center">
+                <a href="{{ route('dashboard') }}" class="text-blue-500 hover:underline mr-4">Kembali ke Dashboard</a>
+                <a href="{{ route('monitoring.sources.index') }}" class="text-blue-500 hover:underline">Kembali ke Manajemen Situs</a>
+            </div>
         </div>
     </body>
 </html>

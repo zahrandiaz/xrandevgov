@@ -15,7 +15,6 @@
                         {{ __('Manajemen Situs Monitoring') }}
                     </h2>
                     <div class="flex items-center space-x-4">
-                        {{-- [MODIFIKASI] Tombol Crawl Semua dengan Indikator --}}
                         <form method="POST" action="{{ route('monitoring.sources.crawl') }}" x-data="{ submitting: false }" @submit="submitting = true">
                             @csrf
                             <button type="submit" 
@@ -61,7 +60,6 @@
                                 </div>
                             </div>
                             <div class="flex items-center space-x-3 text-sm">
-                                {{-- [MODIFIKASI] Tombol Crawl Individual dengan Indikator --}}
                                 <form action="{{ route('monitoring.sources.crawl_single', $source) }}" method="POST" x-data="{ submitting: false }" @submit="submitting = true" onsubmit="return confirm('Mulai crawling untuk situs {{ $source->name }}?')">
                                     @csrf
                                     <button type="submit" 
@@ -83,13 +81,23 @@
                     @forelse($provinces as $province)
                         <div x-data="{ open: false }" class="bg-white border border-gray-200 rounded-lg">
                             <div @click="open = !open" class="p-4 flex justify-between items-center cursor-pointer hover:bg-gray-50">
-                                <h3 class="text-lg font-medium text-gray-900">{{ $province->name }}</h3>
+                                {{-- [MODIFIKASI] Tampilkan nama provinsi dan jumlah situs --}}
+                                <div class="flex items-center space-x-3">
+                                    <h3 class="text-lg font-medium text-gray-900">{{ $province->name }}</h3>
+                                    @if($province->total_sites_count > 0)
+                                        <span class="px-2 py-1 text-xs font-semibold text-gray-700 bg-gray-200 rounded-full">
+                                            {{ $province->total_sites_count }} Situs
+                                        </span>
+                                    @endif
+                                </div>
                                 <svg x-show="!open" class="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
                                 <svg x-show="open" class="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path></svg>
                             </div>
 
                             <div x-show="open" class="border-t border-gray-200 p-4 space-y-3">
-                                
+                                @if($province->total_sites_count === 0)
+                                    <p class="text-sm text-gray-500">Tidak ada situs monitoring di provinsi ini.</p>
+                                @endif
                                 {{-- Situs BKD level Provinsi --}}
                                 @foreach($province->monitoringSources as $source)
                                     <div class="flex items-center justify-between p-3 bg-blue-50 rounded-md">
@@ -103,7 +111,6 @@
                                             </div>
                                         </div>
                                         <div class="flex items-center space-x-3 text-sm">
-                                            {{-- [MODIFIKASI] Tombol Crawl Individual dengan Indikator --}}
                                             <form action="{{ route('monitoring.sources.crawl_single', $source) }}" method="POST" x-data="{ submitting: false }" @submit="submitting = true" onsubmit="return confirm('Mulai crawling untuk situs {{ $source->name }}?')">
                                                 @csrf
                                                 <button type="submit" 
@@ -132,7 +139,6 @@
                                             </div>
                                         </div>
                                         <div class="flex items-center space-x-3 text-sm">
-                                            {{-- [MODIFIKASI] Tombol Crawl Individual dengan Indikator --}}
                                             <form action="{{ route('monitoring.sources.crawl_single', $source) }}" method="POST" x-data="{ submitting: false }" @submit="submitting = true" onsubmit="return confirm('Mulai crawling untuk situs {{ $source->name }}?')">
                                                 @csrf
                                                 <button type="submit" 
@@ -147,7 +153,6 @@
                                     </div>
                                     @endforeach
                                 @endforeach
-
                             </div>
                         </div>
                     @empty

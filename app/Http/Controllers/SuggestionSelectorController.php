@@ -2,10 +2,10 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\SuggestionSelector; // [BARU] Impor model kita
+use App\Models\SuggestionSelector;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Cache; // [BARU] Impor cache untuk menghapusnya saat ada perubahan
-use Illuminate\Validation\Rule; // [BARU] Impor Rule untuk validasi unik
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Validation\Rule;
 
 class SuggestionSelectorController extends Controller
 {
@@ -14,7 +14,6 @@ class SuggestionSelectorController extends Controller
      */
     public function index()
     {
-        // Ambil semua selector dan kelompokkan berdasarkan tipe
         $selectors = SuggestionSelector::orderBy('type')->orderBy('priority', 'desc')->get()->groupBy('type');
         return view('suggestion-selectors.index', compact('selectors'));
     }
@@ -38,10 +37,12 @@ class SuggestionSelectorController extends Controller
             'priority' => 'required|integer|min:0',
         ]);
 
-        SuggestionSelector::create($validatedData);
+        $selector = SuggestionSelector::create($validatedData);
 
-        // [BARU] Hapus cache yang relevan agar perubahan langsung terbaca
         Cache::forget('suggestion_selectors_' . $validatedData['type']);
+        
+        // [BARU] Catat aktivitas
+        log_activity("Selector saran baru '{$selector->selector}' telah ditambahkan.", 'success', 'suggestion-selector-management');
 
         return redirect()->route('suggestion-selectors.index')
                          ->with('success', 'Selector saran berhasil ditambahkan!');
@@ -52,7 +53,6 @@ class SuggestionSelectorController extends Controller
      */
     public function edit(SuggestionSelector $suggestionSelector)
     {
-        // Laravel's Route Model Binding akan otomatis menemukan data berdasarkan ID
         return view('suggestion-selectors.edit', compact('suggestionSelector'));
     }
 
@@ -68,12 +68,15 @@ class SuggestionSelectorController extends Controller
         ]);
         
         $oldType = $suggestionSelector->type;
-        
-        $suggestionSelector->update($validatedData);
+        $oldSelectorName = $suggestionSelector->selector;
 
-        // [BARU] Hapus cache lama dan baru jika tipenya berubah
+        $suggestionSelector->update($validatedData);
+        
         Cache::forget('suggestion_selectors_' . $oldType);
         Cache::forget('suggestion_selectors_' . $validatedData['type']);
+        
+        // [BARU] Catat aktivitas
+        log_activity("Selector saran '{$oldSelectorName}' telah diperbarui menjadi '{$suggestionSelector->selector}'.", 'info', 'suggestion-selector-management');
 
         return redirect()->route('suggestion-selectors.index')
                          ->with('success', 'Selector saran berhasil diperbarui!');
@@ -85,10 +88,14 @@ class SuggestionSelectorController extends Controller
     public function destroy(SuggestionSelector $suggestionSelector)
     {
         $type = $suggestionSelector->type;
+        $selectorName = $suggestionSelector->selector; // Simpan nama sebelum dihapus
+        
         $suggestionSelector->delete();
-
-        // [BARU] Hapus cache yang relevan
+        
         Cache::forget('suggestion_selectors_' . $type);
+
+        // [BARU] Catat aktivitas
+        log_activity("Selector saran '{$selectorName}' telah dihapus.", 'warning', 'suggestion-selector-management');
 
         return redirect()->route('suggestion-selectors.index')
                          ->with('success', 'Selector saran berhasil dihapus.');
