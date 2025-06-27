@@ -7,10 +7,6 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Symfony\Component\DomCrawler\Crawler;
 
-/**
- * [v1.18] EVOLUSI: Mesin Saran Hibrida Otomatis.
- * Menggabungkan kecepatan kamus database dengan kekuatan analisis heuristik.
- */
 class SelectorSuggestionService
 {
     private $crawlerService;
@@ -24,182 +20,146 @@ class SelectorSuggestionService
     {
         $dictionaryResult = $this->suggestViaDictionary($baseUrl, $crawlUrlPath);
         if ($dictionaryResult['success']) {
-            Log::info("[Selector Suggestion] Sukses menemukan selector menggunakan metode Kamus untuk URL: " . $baseUrl);
             return $dictionaryResult;
         }
-
-        Log::info("[Selector Suggestion] Metode kamus gagal, mencoba analisis Heuristik untuk URL: " . $baseUrl);
-        $heuristicResult = $this->suggestViaHeuristics($baseUrl, $crawlUrlPath);
-
-        return $heuristicResult;
+        return $this->suggestViaHeuristics($baseUrl, $crawlUrlPath);
     }
 
     private function suggestViaDictionary(string $baseUrl, ?string $crawlUrlPath): array
     {
-        $successfulTitleSelectors = [];
         $titleSelectors = $this->getTitleSelectors();
-
         foreach ($titleSelectors as $selector) {
             try {
                 $this->crawlerService->parseArticles($baseUrl, $crawlUrlPath ?? '/', $selector, null, null, 1);
-                $successfulTitleSelectors[] = $selector;
-            } catch (\Exception $e) {
-                continue;
-            }
+                $dateSelectors = $this->findMatchingDateSelectorFromDictionary($baseUrl, $crawlUrlPath, $selector);
+                return ['success' => true, 'title_selectors' => [$selector], 'date_selectors' => $dateSelectors, 'method' => 'dictionary'];
+            } catch (\Exception $e) { continue; }
         }
-
-        if (empty($successfulTitleSelectors)) {
-            return ['success' => false];
-        }
-
-        $bestTitleSelector = $successfulTitleSelectors[0];
-        $successfulDateSelectors = $this->findMatchingDateSelector($baseUrl, $crawlUrlPath, $bestTitleSelector);
-
-        return [
-            'success' => true,
-            'title_selectors' => $successfulTitleSelectors,
-            'date_selectors' => $successfulDateSelectors,
-            'method' => 'dictionary'
-        ];
+        return ['success' => false];
     }
-
+    
     /**
-     * [BARU v1.18] STRATEGI 2: Menganalisis konten HTML secara langsung (Heuristik - Level 1).
-     * "Detektif Junior" yang mencari pola berulang pada link.
+     * [REWORK FINAL v1.19.4] Logika heuristik dengan pemahaman konteks.
      */
     private function suggestViaHeuristics(string $baseUrl, ?string $crawlUrlPath): array
     {
         try {
-            // 1. Ambil konten mentah halaman
             $crawler = $this->crawlerService->fetchHtmlAsCrawler($baseUrl, $crawlUrlPath ?? '/');
 
-            $candidateLinks = [];
+            // 1. Buang semua bagian yang tidak relevan terlebih dahulu (header, footer, nav, sidebar)
+            $crawler->filter('header, footer, nav, aside, .sidebar, #sidebar, .footer, #footer')->each(function (Crawler $node) {
+                foreach ($node as $n) { $n->parentNode->removeChild($n); }
+            });
 
-            // 2. Kumpulkan semua link sebagai kandidat
+            $candidateLinks = [];
+            // 2. Kumpulkan link dari area konten yang sudah bersih
             $crawler->filter('a')->each(function (Crawler $node) use (&$candidateLinks) {
                 $text = trim($node->text());
                 $href = $node->attr('href');
-
-                // 3. Terapkan Aturan Filter (Heuristik)
-                if (
-                    !empty($href) && !str_starts_with($href, '#') && // Bukan link anchor
-                    mb_strlen($text) > 20 && mb_strlen($text) < 150 && // Aturan panjang judul
-                    !preg_match('/(login|kontak|tentang|privacy|policy|selengkapnya|read more|next|prev)/i', $text) // Kata kunci negatif
-                ) {
+                if (!empty($href) && !str_starts_with($href, '#') && mb_strlen($text) > 25 && mb_strlen($text) < 200) {
                     $candidateLinks[] = $node;
                 }
             });
 
-            if (count($candidateLinks) < 3) { // Butuh setidaknya 3 kandidat untuk menemukan pola
-                throw new \Exception("Tidak cukup kandidat link yang valid untuk dianalisis.");
+            if (count($candidateLinks) < 3) {
+                throw new \Exception("Tidak cukup kandidat link valid setelah filter.");
             }
 
-            // 4. Identifikasi Pola Berulang
             $selectorPatterns = [];
             foreach ($candidateLinks as $linkNode) {
-                $selectorPath = $this->generateSelectorPath($linkNode);
-                if ($selectorPath) {
-                    $selectorPatterns[] = $selectorPath;
-                }
+                if ($selectorPath = $this->generateSelectorPath($linkNode)) $selectorPatterns[] = $selectorPath;
             }
+            
+            if (empty($selectorPatterns)) throw new \Exception("Tidak dapat menghasilkan pola selector.");
 
-            if (empty($selectorPatterns)) {
-                throw new \Exception("Tidak dapat menghasilkan pola selector dari kandidat yang ada.");
-            }
-
-            // Hitung frekuensi setiap pola dan temukan yang paling umum
             $patternCounts = array_count_values($selectorPatterns);
             arsort($patternCounts);
             $bestPattern = key($patternCounts);
-
-            // 5. Hasilkan Selector Unik dan Kembalikan Hasil
-            $successfulTitleSelectors = [$bestPattern];
-            $successfulDateSelectors = $this->findMatchingDateSelector($baseUrl, $crawlUrlPath, $bestPattern);
+            
+            $dateSelectors = $this->findHeuristicDateSelector($crawler, $bestPattern);
 
             return [
                 'success' => true,
-                'title_selectors' => $successfulTitleSelectors,
-                'date_selectors' => $successfulDateSelectors,
+                'title_selectors' => [$bestPattern],
+                'date_selectors' => $dateSelectors,
                 'method' => 'heuristic'
             ];
-
         } catch (\Exception $e) {
-            Log::error("[Heuristic Suggestion] Gagal: " . $e->getMessage());
-            return [
-                'success' => false,
-                'message' => 'Analisis heuristik gagal: ' . $e->getMessage(),
-                'method' => 'heuristic'
-            ];
+            return ['success' => false, 'message' => 'Analisis heuristik gagal: ' . $e->getMessage(), 'method' => 'heuristic'];
         }
     }
 
-    /**
-     * [BARU v1.18] Helper untuk menghasilkan path CSS selector unik untuk sebuah node.
-     * Contoh: body > div.content > article.post > h2 > a
-     */
-    private function generateSelectorPath(Crawler $node): ?string
+    private function findHeuristicDateSelector(Crawler $crawler, string $titleSelector): array
     {
-        $path = [];
-        $currentNode = $node;
-
-        // Berjalan naik dari node saat ini hingga ke body
-        while ($currentNode->count() > 0 && $currentNode->nodeName() !== 'body') {
-            $nodeName = $currentNode->nodeName();
-            $id = $currentNode->attr('id');
-            $classNames = $currentNode->attr('class');
-
-            $selectorPart = $nodeName;
-            if ($id) {
-                // Jika ada ID, itu sudah cukup unik, kita bisa berhenti.
-                $selectorPart .= '#' . $id;
-                $path[] = $selectorPart;
-                break; // Keluar dari loop
+        // Kode ini tidak perlu diubah, sudah cukup baik dari versi sebelumnya.
+        $firstTitleNode = $crawler->filter($titleSelector)->first();
+        if ($firstTitleNode->count() === 0) return [];
+        $searchContainer = $firstTitleNode->closest('article, .post, .item, li, div, tr') ?? $crawler->filter('body')->first();
+        $dateSelectorCandidates = [];
+        $searchContainer->filter('*')->each(function (Crawler $node) use (&$dateSelectorCandidates) {
+            $text = '';
+            foreach ($node->getNode(0)->childNodes as $child) {
+                if ($child instanceof \DOMText) $text .= $child->nodeValue;
             }
-            if ($classNames) {
-                $selectorPart .= '.' . implode('.', explode(' ', $classNames));
+            if (preg_match('/(\d{1,2}\s+[a-zA-Z\s]+\s+\d{4})|(\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{2,4})/i', trim($text))) {
+                $dateSelectorCandidates[] = $this->generateSelectorPath($node);
             }
-
-            array_unshift($path, $selectorPart);
-            $currentNode = $currentNode->getNode(0)->parentNode ? new Crawler($currentNode->getNode(0)->parentNode) : null;
-        }
-
-        return implode(' > ', $path);
+        });
+        if (empty($dateSelectorCandidates)) return [];
+        $patternCounts = array_count_values(array_filter($dateSelectorCandidates));
+        arsort($patternCounts);
+        return [key($patternCounts)];
     }
 
-    private function findMatchingDateSelector(string $baseUrl, ?string $crawlUrlPath, string $titleSelector): array
+    private function findMatchingDateSelectorFromDictionary(string $baseUrl, ?string $crawlUrlPath, string $titleSelector): array
     {
-        $successfulDateSelectors = [];
         $dateSelectors = $this->getDateSelectors();
-
         foreach ($dateSelectors as $selector) {
             try {
                 $articles = $this->crawlerService->parseArticles($baseUrl, $crawlUrlPath ?? '/', $titleSelector, $selector, null, 5);
-                $dateFound = collect($articles)->contains(fn($article) => !empty($article['date']));
-                if ($dateFound) {
-                    $successfulDateSelectors[] = $selector;
-                }
-            } catch (\Exception $e) {
-                continue;
-            }
+                if (collect($articles)->contains(fn($a) => !empty($a['date']))) return [$selector];
+            } catch (\Exception $e) { continue; }
         }
-        return $successfulDateSelectors;
+        return [];
+    }
+
+    private function generateSelectorPath(Crawler $node): ?string
+    {
+        if ($node->count() === 0) return null;
+        $path = [];
+        $currentNode = $node;
+        for ($i = 0; $i < 10; $i++) {
+            if ($currentNode === null || $currentNode->count() === 0 || $currentNode->nodeName() === 'body') break;
+            $nodeName = $currentNode->nodeName();
+            $id = $currentNode->attr('id');
+            $selectorPart = $nodeName;
+            if ($id) {
+                $selectorPart .= '#' . $id;
+                array_unshift($path, $selectorPart);
+                break;
+            } else {
+                $classNames = trim($currentNode->attr('class'));
+                if ($classNames) $selectorPart .= '.' . implode('.', preg_split('/\s+/', $classNames));
+            }
+            array_unshift($path, $selectorPart);
+            $domNode = $currentNode->getNode(0);
+            $parentNode = $domNode ? $domNode->parentNode : null;
+            $currentNode = $parentNode ? new Crawler($parentNode) : null;
+        }
+        return implode(' > ', $path);
     }
 
     public function getTitleSelectors(): array
     {
         return Cache::remember('suggestion_selectors_title', 3600, function () {
-            return SuggestionSelector::where('type', 'title')
-                ->orderBy('priority', 'desc')
-                ->pluck('selector')->all();
+            return SuggestionSelector::where('type', 'title')->orderBy('priority', 'desc')->pluck('selector')->all();
         });
     }
 
     public function getDateSelectors(): array
     {
         return Cache::remember('suggestion_selectors_date', 3600, function () {
-            return SuggestionSelector::where('type', 'date')
-                ->orderBy('priority', 'desc')
-                ->pluck('selector')->all();
+            return SuggestionSelector::where('type', 'date')->orderBy('priority', 'desc')->pluck('selector')->all();
         });
     }
 }
