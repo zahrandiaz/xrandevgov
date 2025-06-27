@@ -163,63 +163,34 @@ class MonitoringSourceController extends Controller
     }
 
     /**
-     * [MODIFIKASI] Handle AJAX request to suggest selectors for a given URL for both title and date.
+     * [MODIFIKASI v1.18] Menangani permintaan AJAX untuk saran selector.
+     * Sekarang hanya bertindak sebagai jembatan ke SelectorSuggestionService.
      */
-    public function suggestSelectorsAjax(Request $request, CrawlerService $crawlerService, SelectorSuggestionService $suggestionService)
+    public function suggestSelectorsAjax(Request $request, SelectorSuggestionService $suggestionService)
     {
         $validatedData = $request->validate([
             'url' => 'required|url:http,https',
             'crawl_url' => 'nullable|string',
         ]);
 
-        // 1. Cari Selector Judul
-        $successfulTitleSelectors = [];
-        $titleSelectors = $suggestionService->getTitleSelectors();
-        foreach ($titleSelectors as $selector) {
-            try {
-                $crawlerService->parseArticles($validatedData['url'], $validatedData['crawl_url'] ?? '/', $selector, null, null);
-                $successfulTitleSelectors[] = $selector;
-            } catch (\Exception $e) {
-                continue;
-            }
-        }
+        // Panggil metode utama dari service. Service akan menangani semua logika hibrida.
+        $result = $suggestionService->suggest(
+            $validatedData['url'],
+            $validatedData['crawl_url']
+        );
 
-        if (empty($successfulTitleSelectors)) {
+        if (!$result['success']) {
             return response()->json([
                 'success' => false,
-                'message' => 'Tidak ada selector judul yang cocok ditemukan dari kamus kami.'
+                'message' => $result['message'] ?? 'Tidak ada selector yang cocok ditemukan.'
             ], 404);
-        }
-
-        // 2. [BARU] Jika Judul ditemukan, lanjutkan cari Selector Tanggal
-        $bestTitleSelector = $successfulTitleSelectors[0]; // Gunakan selector judul terbaik sebagai acuan
-        $successfulDateSelectors = [];
-        $dateSelectors = $suggestionService->getDateSelectors();
-        
-        foreach ($dateSelectors as $selector) {
-            try {
-                $articles = $crawlerService->parseArticles($validatedData['url'], $validatedData['crawl_url'] ?? '/', $bestTitleSelector, $selector, null);
-                // Cek apakah setidaknya satu artikel memiliki tanggal yang berhasil diparsing
-                $dateFound = false;
-                foreach($articles as $article) {
-                    if (!empty($article['date'])) {
-                        $dateFound = true;
-                        break;
-                    }
-                }
-                if ($dateFound) {
-                    $successfulDateSelectors[] = $selector;
-                }
-            } catch (\Exception $e) {
-                continue;
-            }
         }
 
         return response()->json([
             'success' => true,
-            'message' => 'Analisis selesai.',
-            'title_selectors' => $successfulTitleSelectors,
-            'date_selectors' => $successfulDateSelectors // Kirim juga hasil selector tanggal
+            'message' => 'Analisis selesai menggunakan metode: ' . ucfirst($result['method']),
+            'title_selectors' => $result['title_selectors'],
+            'date_selectors' => $result['date_selectors']
         ]);
     }
 

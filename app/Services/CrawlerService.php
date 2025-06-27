@@ -16,6 +16,34 @@ class CrawlerService
         $this->httpClient = HttpClient::create(['verify_peer' => false, 'verify_host' => false]);
     }
 
+    /**
+     * [BARU v1.18] Mengambil konten HTML mentah dari URL sebagai objek Crawler.
+     * Diperlukan untuk analisis heuristik.
+     *
+     * @param string $baseUrl
+     * @param string $crawlUrlPath
+     * @return Crawler
+     * @throws \Exception
+     */
+    public function fetchHtmlAsCrawler(string $baseUrl, string $crawlUrlPath): Crawler
+    {
+        $fullCrawlUrl = rtrim($baseUrl, '/') . '/' . ltrim($crawlUrlPath, '/');
+        $client = new HttpBrowser($this->httpClient);
+
+        Log::info("CrawlerService: Mengambil konten mentah dari URL: {$fullCrawlUrl}");
+
+        try {
+            $crawler = $client->request('GET', $fullCrawlUrl);
+            return $crawler;
+        } catch (\Symfony\Component\HttpClient\Exception\TransportException $e) {
+            Log::error("CrawlerService: Gagal terhubung ke {$fullCrawlUrl}. Error: " . $e->getMessage());
+            throw new \Exception("Gagal terhubung ke URL. Pastikan URL benar dan situs aktif. Detail: " . $e->getMessage());
+        } catch (\Exception $e) {
+            Log::error("CrawlerService: Terjadi kesalahan saat memproses {$fullCrawlUrl}. Error: " . $e->getMessage());
+            throw $e; // Lemparkan kembali exception asli
+        }
+    }
+
     public function parseArticles(string $baseUrl, string $crawlUrlPath, string $titleSelector, ?string $dateSelector, ?string $linkSelector): array
     {
         $fullCrawlUrl = rtrim($baseUrl, '/') . '/' . ltrim($crawlUrlPath, '/');
