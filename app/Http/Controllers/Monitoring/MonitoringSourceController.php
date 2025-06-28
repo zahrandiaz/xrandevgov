@@ -12,10 +12,11 @@ use App\Jobs\CrawlSourceJob;
 use Illuminate\Http\Request;
 use App\Services\CrawlerService;
 use App\Services\SelectorSuggestionService;
+use Illuminate\Support\Str; // [BARU v1.21] Import Str
 
 class MonitoringSourceController extends Controller
 {
-    // ... (metode index hingga suggestSelectorsAjax tetap sama persis) ...
+    // ... (metode index hingga destroy tetap sama persis) ...
     public function index()
     {
         $provinces = Region::where('type', 'Provinsi')
@@ -163,20 +164,21 @@ class MonitoringSourceController extends Controller
     }
 
     /**
-     * [MODIFIKASI v1.18] Menangani permintaan AJAX untuk saran selector.
-     * Sekarang hanya bertindak sebagai jembatan ke SelectorSuggestionService.
+     * [MODIFIKASI v1.21] Menangani permintaan AJAX untuk saran selector dari berbagai strategi.
      */
     public function suggestSelectorsAjax(Request $request, SelectorSuggestionService $suggestionService)
     {
         $validatedData = $request->validate([
             'url' => 'required|url:http,https',
             'crawl_url' => 'nullable|string',
+            'strategy' => 'required|in:stable,experimental' // Parameter strategi baru
         ]);
 
-        // Panggil metode utama dari service. Service akan menangani semua logika hibrida.
+        // Panggil metode utama dari service dengan strategi yang dipilih
         $result = $suggestionService->suggest(
             $validatedData['url'],
-            $validatedData['crawl_url']
+            $validatedData['crawl_url'],
+            $validatedData['strategy'] // Teruskan strategi ke service
         );
 
         if (!$result['success']) {
@@ -188,10 +190,46 @@ class MonitoringSourceController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Analisis selesai menggunakan metode: ' . ucfirst($result['method']),
+            'message' => 'Analisis ' . Str::studly($result['method']) . ' selesai.',
             'title_selectors' => $result['title_selectors'],
             'date_selectors' => $result['date_selectors']
         ]);
+    }
+    
+    /**
+     * [BARU v1.21] Menangani permintaan untuk fitur Inspektur DOM.
+     */
+    public function inspectHtml(Request $request, CrawlerService $crawlerService)
+    {
+        $validatedData = $request->validate([
+            'url' => 'required|url:http,https',
+            'crawl_url' => 'nullable|string',
+            'selector_title' => 'required|string',
+        ]);
+
+        try {
+            $crawler = $crawlerService->fetchHtmlAsCrawler($validatedData['url'], $validatedData['crawl_url'] ?? '/');
+            $firstTitleNode = $crawler->filter($validatedData['selector_title'])->first();
+
+            if ($firstTitleNode->count() === 0) {
+                return response()->json(['success' => false, 'message' => 'Selector judul tidak ditemukan di halaman target.'], 404);
+            }
+
+            // Ambil "kakek" dari judul sebagai blok cuplikan
+            $block = $firstTitleNode->ancestors()->eq(1) ?? $firstTitleNode->ancestors()->first();
+            
+            if (!$block || $block->count() === 0) {
+                 return response()->json(['success' => false, 'message' => 'Tidak dapat menemukan blok HTML induk dari judul.'], 404);
+            }
+
+            return response()->json([
+                'success' => true,
+                'html' => $block->outerHtml()
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json(['success' => false, 'message' => 'Gagal mengambil HTML: ' . $e->getMessage()], 500);
+        }
     }
 
     public function crawl(Request $request)
@@ -207,7 +245,6 @@ class MonitoringSourceController extends Controller
             CrawlSourceJob::dispatch($source);
         }
         
-        // [MODIFIKASI] Gunakan sistem notifikasi toast
         $message = 'Proses crawling untuk ' . $sources->count() . ' situs aktif telah dimulai.';
         return redirect()->route('monitoring.sources.index')
                          ->with('notify', ['info', $message]);
@@ -217,7 +254,6 @@ class MonitoringSourceController extends Controller
     {
         CrawlSourceJob::dispatch($source);
         
-        // [MODIFIKASI] Gunakan sistem notifikasi toast
         $message = "Proses crawling untuk situs '{$source->name}' telah dimulai.";
         return redirect()->route('monitoring.sources.index')
                          ->with('notify', ['info', $message]);

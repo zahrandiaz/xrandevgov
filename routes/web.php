@@ -51,6 +51,9 @@ Route::middleware('access.code')->group(function () {
     Route::post('/monitoring/sources/test-selector', [MonitoringSourceController::class, 'testSelector'])->name('monitoring.sources.testSelector');
     Route::post('/monitoring/sources/suggest-selectors-ajax', [MonitoringSourceController::class, 'suggestSelectorsAjax'])->name('monitoring.sources.suggest_selectors_ajax');
 
+    // [BARU v1.21] Rute untuk fitur Inspektur DOM
+    Route::post('/monitoring/sources/inspect-html', [MonitoringSourceController::class, 'inspectHtml'])->name('monitoring.sources.inspect_html');
+
     // Rute untuk daftar artikel
     Route::get('/monitoring/articles', [MonitoringSourceController::class, 'listArticles'])->name('monitoring.articles.index');
     Route::delete('/monitoring/articles/{article}', [MonitoringSourceController::class, 'destroyArticle'])->name('monitoring.articles.destroy');

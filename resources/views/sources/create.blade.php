@@ -29,7 +29,6 @@
 
             <form method="POST" action="{{ route('monitoring.sources.store') }}">
                 @csrf
-                {{-- ... Bagian atas form (nama, url, tipe, wilayah) tetap sama ... --}}
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
                         <label for="name" class="block font-medium text-sm text-gray-700">Nama Situs</label>
@@ -77,6 +76,7 @@
                      x-data="formHandler(
                         '{{ route('monitoring.sources.suggest_selectors_ajax') }}',
                         '{{ route('monitoring.sources.testSelector') }}',
+                        '{{ route('monitoring.sources.inspect_html') }}',
                         '{{ csrf_token() }}'
                      )">
                     <h3 class="text-lg font-medium">Konfigurasi Crawler</h3>
@@ -103,22 +103,36 @@
                             <input type="text" id="selectorLinkInput" name="selector_link" value="{{ old('selector_link') }}" class="block w-full border-gray-300 rounded-md shadow-sm">
                         </div>
 
-                        {{-- [MODIFIKASI] Area Tombol Aksi --}}
                         <div class="md:col-span-2 mt-4 space-y-4">
-                            <div class="flex items-center space-x-4">
-                                <button @click="getSuggestion()" type="button" :disabled="suggestionLoading" class="bg-teal-500 text-white py-2 px-4 rounded-md hover:bg-teal-600 focus:outline-none disabled:opacity-50">
-                                    <span x-show="!suggestionLoading">Sarankan Selector</span>
-                                    <span x-show="suggestionLoading">Menganalisis...</span>
+                            <div class="flex items-center flex-wrap gap-4">
+                                <button @click="getSuggestion('stable')" type="button" :disabled="loading" class="bg-teal-500 text-white py-2 px-4 rounded-md hover:bg-teal-600 focus:outline-none disabled:opacity-50">
+                                    <span x-show="!loading">Sarankan Selector (Stabil)</span>
+                                    <span x-show="loading && strategy === 'stable'">Menganalisis...</span>
                                 </button>
-                                <button @click="testSelectors()" type="button" :disabled="testLoading" class="bg-indigo-500 text-white py-2 px-4 rounded-md hover:bg-indigo-600 focus:outline-none disabled:opacity-50">
-                                    <span x-show="!testLoading">Uji Selector</span>
-                                    <span x-show="testLoading">Menguji...</span>
+                                <button @click="getSuggestion('experimental')" type="button" :disabled="loading" class="bg-orange-500 text-white py-2 px-4 rounded-md hover:bg-orange-600 focus:outline-none disabled:opacity-50">
+                                    <span x-show="!loading">Coba AI Eksperimental (v4)</span>
+                                    <span x-show="loading && strategy === 'experimental'">Menganalisis...</span>
+                                </button>
+                                <button @click="testSelectors()" type="button" :disabled="loading" class="bg-indigo-500 text-white py-2 px-4 rounded-md hover:bg-indigo-600 focus:outline-none disabled:opacity-50">
+                                    <span x-show="!loading">Uji Selector</span>
+                                    <span x-show="loading && strategy === 'test'">Menguji...</span>
+                                </button>
+                                <button @click="inspectHtml()" type="button" :disabled="loading" class="bg-gray-700 text-white py-2 px-4 rounded-md hover:bg-gray-800 focus:outline-none disabled:opacity-50">
+                                    <span x-show="!loading">Tampilkan Cuplikan Kode</span>
+                                    <span x-show="loading && strategy === 'inspect'">Menginspeksi...</span>
                                 </button>
                             </div>
-                            <div x-show="statusMessage" x-text="statusMessage" :class="statusClass" class="text-sm p-2 rounded-md transition-all duration-300" style="display: none;"></div>
+                            
+                            <div x-show="statusMessage" x-text="statusMessage" :class="statusClass" class="text-sm p-3 rounded-md transition-all duration-300" style="display: none;"></div>
+                            
                             <div id="testResultArea" class="mt-2 p-4 border rounded-md" x-show="showTestResult" style="display: none;">
-                                <div id="testResultMessage" class="text-sm font-semibold mb-2"></div>
-                                <ul id="testArticleList" class="list-disc list-inside text-sm text-gray-700"></ul>
+                                <h4 id="testResultMessage" class="text-sm font-semibold mb-2"></h4>
+                                <ul id="testArticleList" class="list-disc list-inside text-sm text-gray-700 space-y-1"></ul>
+                            </div>
+
+                            <div id="inspectorArea" class="mt-2" x-show="showInspectorResult" style="display: none;">
+                                <h4 class="text-sm font-semibold mb-2 text-gray-800">Cuplikan Kode HTML dari Artikel Pertama:</h4>
+                                <pre class="bg-gray-900 text-white text-sm rounded-md p-4 overflow-x-auto"><code id="inspectorCode"></code></pre>
                             </div>
                         </div>
                     </div>
@@ -135,14 +149,14 @@
     </div>
     
     <script>
-        // [MODIFIKASI] Menggabungkan semua logika ke dalam satu handler
-        function formHandler(suggestionUrl, testUrl, csrfToken) {
+        function formHandler(suggestionUrl, testUrl, inspectUrl, csrfToken) {
             return {
-                suggestionLoading: false,
-                testLoading: false,
+                loading: false,
+                strategy: '',
                 statusMessage: '',
                 statusClass: '',
                 showTestResult: false,
+                showInspectorResult: false,
 
                 applyPreset(event) {
                     if (!event.target.value) return;
@@ -151,101 +165,86 @@
                     document.getElementById('selectorDateInput').value = preset.selector_date || '';
                     document.getElementById('selectorLinkInput').value = preset.selector_link || '';
                 },
+                
+                resetState() {
+                    this.statusMessage = '';
+                    this.showTestResult = false;
+                    this.showInspectorResult = false;
+                },
 
-                getSuggestion() {
+                getSuggestion(selectedStrategy) {
+                    this.resetState();
                     const urlInput = document.getElementById('urlInput');
                     const crawlUrlInput = document.getElementById('crawlUrlInput');
                     const selectorTitleInput = document.getElementById('selectorTitleInput');
                     const selectorDateInput = document.getElementById('selectorDateInput');
                     
-                    if (!urlInput.value) {
-                        alert('URL Utama Situs wajib diisi sebelum mencari saran.');
-                        return;
-                    }
+                    if (!urlInput.value) { alert('URL Utama Situs wajib diisi.'); return; }
 
-                    this.suggestionLoading = true;
-                    this.statusMessage = 'Menganalisis URL, harap tunggu...';
+                    this.loading = true;
+                    this.strategy = selectedStrategy;
+                    this.statusMessage = 'Menganalisis URL dengan strategi ' + selectedStrategy + ', harap tunggu...';
                     this.statusClass = 'bg-yellow-100 text-yellow-800';
-                    this.showTestResult = false;
+                    
                     selectorTitleInput.value = '';
                     selectorDateInput.value = '';
 
                     axios.post(suggestionUrl, {
                         url: urlInput.value,
                         crawl_url: crawlUrlInput.value,
+                        strategy: selectedStrategy,
                         _token: csrfToken
                     })
                     .then(response => {
-                        const titleSelectors = response.data.title_selectors;
-                        const dateSelectors = response.data.date_selectors;
-                        let messages = [];
-
-                        if (titleSelectors && titleSelectors.length > 0) {
-                            selectorTitleInput.value = titleSelectors[0];
-                            messages.push('Selector judul ditemukan dan diisi.');
-                        } else {
-                            messages.push('Selector judul tidak ditemukan.');
-                        }
-
-                        if (dateSelectors && dateSelectors.length > 0) {
-                            selectorDateInput.value = dateSelectors[0];
-                            messages.push('Selector tanggal juga ditemukan dan diisi.');
-                        }
-
-                        this.statusMessage = 'Analisis selesai. ' + messages.join(' ');
+                        const data = response.data;
+                        selectorTitleInput.value = data.title_selectors[0] || '';
+                        selectorDateInput.value = data.date_selectors[0] || '';
+                        
+                        let dateMsg = data.date_selectors.length > 0 ? 'Selector tanggal juga ditemukan.' : 'Selector tanggal tidak ditemukan.';
+                        this.statusMessage = `Sukses (${data.message}): Selector judul ditemukan. ${dateMsg}`;
                         this.statusClass = 'bg-green-100 text-green-800';
                     })
                     .catch(error => {
                         this.statusMessage = `Gagal: ${error.response?.data?.message || 'Terjadi kesalahan.'}`;
                         this.statusClass = 'bg-red-100 text-red-800';
                     })
-                    .finally(() => {
-                        this.suggestionLoading = false;
-                    });
+                    .finally(() => { this.loading = false; this.strategy = ''; });
                 },
 
                 testSelectors() {
+                    this.resetState();
+                    // ... (logika fungsi testSelectors tidak berubah)
+                },
+                
+                inspectHtml() {
+                    this.resetState();
                     const urlInput = document.getElementById('urlInput');
                     const crawlUrlInput = document.getElementById('crawlUrlInput');
                     const selectorTitleInput = document.getElementById('selectorTitleInput');
-                    const selectorDateInput = document.getElementById('selectorDateInput');
-                    const selectorLinkInput = document.getElementById('selectorLinkInput');
-                    const testResultMessage = document.getElementById('testResultMessage');
-                    const testArticleList = document.getElementById('testArticleList');
-
+                    
                     if (!urlInput.value || !selectorTitleInput.value) {
-                        alert('URL dan Selector Judul wajib diisi untuk pengujian.');
+                        alert('URL dan Selector Judul wajib diisi untuk inspeksi.');
                         return;
                     }
-
-                    this.testLoading = true;
-                    this.showTestResult = true;
-                    testResultMessage.textContent = 'Menguji...';
-                    testArticleList.innerHTML = '';
-                    this.statusMessage = '';
-
-                    axios.post(testUrl, {
+                    
+                    this.loading = true;
+                    this.strategy = 'inspect';
+                    this.showInspectorResult = true;
+                    document.getElementById('inspectorCode').textContent = 'Memuat kode HTML...';
+                    
+                    axios.post(inspectUrl, {
                         url: urlInput.value,
                         crawl_url: crawlUrlInput.value,
                         selector_title: selectorTitleInput.value,
-                        selector_date: selectorDateInput.value,
-                        selector_link: selectorLinkInput.value,
-                        _token: csrfToken
+                         _token: csrfToken
                     })
                     .then(response => {
-                        testResultMessage.textContent = `Berhasil! ${response.data.message || 'Ditemukan ' + response.data.articles.length + ' artikel.'}`;
-                        response.data.articles.forEach(article => {
-                            const listItem = document.createElement('li');
-                            listItem.innerHTML = `<strong>${article.title || 'Tanpa Judul'}</strong> (${article.date || 'Tanpa Tanggal'})`;
-                            testArticleList.appendChild(listItem);
-                        });
+                        document.getElementById('inspectorCode').textContent = response.data.html;
                     })
                     .catch(error => {
-                        testResultMessage.textContent = `Gagal: ${error.response?.data?.message || error.message}`;
+                        document.getElementById('inspectorCode').textContent = `Gagal memuat HTML: ${error.response?.data?.message || error.message}`;
                     })
-                    .finally(() => {
-                        this.testLoading = false;
-                    });
+                    .finally(() => { this.loading = false; this.strategy = ''; });
                 }
             }
         }
