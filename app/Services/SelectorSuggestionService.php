@@ -22,11 +22,14 @@ class SelectorSuggestionService
         if ($dictionaryResult['success']) {
             return $dictionaryResult;
         }
-        return $this->suggestViaHeuristics($baseUrl, $crawlUrlPath);
+        
+        // [v1.20.3] Panggil logika heuristik Hibrida Level 3.3
+        return $this->suggestViaHeuristicsV3_3($baseUrl, $crawlUrlPath);
     }
 
     private function suggestViaDictionary(string $baseUrl, ?string $crawlUrlPath): array
     {
+        // Fungsi ini tidak berubah
         $titleSelectors = $this->getTitleSelectors();
         foreach ($titleSelectors as $selector) {
             try {
@@ -39,77 +42,173 @@ class SelectorSuggestionService
     }
     
     /**
-     * [REWORK FINAL v1.19.4] Logika heuristik dengan pemahaman konteks.
+     * [REWORK TOTAL v1.20.3 - Final Hotfix] Logika Heuristik Hibrida Level 3.3.
      */
-    private function suggestViaHeuristics(string $baseUrl, ?string $crawlUrlPath): array
+    private function suggestViaHeuristicsV3_3(string $baseUrl, ?string $crawlUrlPath): array
     {
         try {
             $crawler = $this->crawlerService->fetchHtmlAsCrawler($baseUrl, $crawlUrlPath ?? '/');
 
-            // 1. Buang semua bagian yang tidak relevan terlebih dahulu (header, footer, nav, sidebar)
-            $crawler->filter('header, footer, nav, aside, .sidebar, #sidebar, .footer, #footer')->each(function (Crawler $node) {
-                foreach ($node as $n) { $n->parentNode->removeChild($n); }
+            $crawler->filter('header, footer, nav, aside, .sidebar, #sidebar, .footer, #footer, script, style')->each(function (Crawler $node) {
+                foreach ($node as $n) { if($n->parentNode) {$n->parentNode->removeChild($n);} }
             });
 
-            $candidateLinks = [];
-            // 2. Kumpulkan link dari area konten yang sudah bersih
-            $crawler->filter('a')->each(function (Crawler $node) use (&$candidateLinks) {
-                $text = trim($node->text());
-                $href = $node->attr('href');
-                if (!empty($href) && !str_starts_with($href, '#') && mb_strlen($text) > 25 && mb_strlen($text) < 200) {
-                    $candidateLinks[] = $node;
+            // --- STRATEGI 1: Analisis Blok (v3.3) ---
+            $blockSelector = $this->findArticleBlockSelectorViaReversePatternV2($crawler);
+            
+            if ($blockSelector) {
+                $articleBlocks = $crawler->filter($blockSelector)->each(fn($node) => $node);
+                if (count($articleBlocks) >= 3) {
+                    $bestTitlePattern = $this->findBestTitlePatternInBlocks($articleBlocks);
+                    if ($bestTitlePattern) {
+                        $bestDatePattern = $this->findBestDatePatternInBlocks($articleBlocks, $bestTitlePattern);
+                        return [
+                            'success' => true, 'title_selectors' => [$bestTitlePattern],
+                            'date_selectors' => $bestDatePattern ? [$bestDatePattern] : [],
+                            'method' => 'heuristic_v3.3 (Block Analysis)'
+                        ];
+                    }
                 }
-            });
-
-            if (count($candidateLinks) < 3) {
-                throw new \Exception("Tidak cukup kandidat link valid setelah filter.");
             }
 
-            $selectorPatterns = [];
-            foreach ($candidateLinks as $linkNode) {
-                if ($selectorPath = $this->generateSelectorPath($linkNode)) $selectorPatterns[] = $selectorPath;
+            // --- STRATEGI 2: Fallback ke Analisis Pola Link Langsung ---
+            Log::info("Heuristik v3.3: Gagal menemukan blok, fallback ke analisis pola link langsung.");
+            $linkPatterns = $this->findAllLinkPatterns($crawler);
+            if (empty($linkPatterns)) {
+                throw new \Exception("Analisis Gagal: Tidak ada kandidat link yang ditemukan.");
             }
             
-            if (empty($selectorPatterns)) throw new \Exception("Tidak dapat menghasilkan pola selector.");
-
-            $patternCounts = array_count_values($selectorPatterns);
+            $patternCounts = array_count_values($linkPatterns);
             arsort($patternCounts);
-            $bestPattern = key($patternCounts);
+            $bestTitlePattern = key($patternCounts);
             
-            $dateSelectors = $this->findHeuristicDateSelector($crawler, $bestPattern);
+            $bestDatePattern = $this->findBestDatePatternInBlocks($crawler->filter('body')->each(fn($n)=>$n), $bestTitlePattern);
 
             return [
                 'success' => true,
-                'title_selectors' => [$bestPattern],
-                'date_selectors' => $dateSelectors,
-                'method' => 'heuristic'
+                'title_selectors' => [$bestTitlePattern],
+                'date_selectors' => $bestDatePattern ? [$bestDatePattern] : [],
+                'method' => 'heuristic_v3.3 (Direct Pattern Fallback)'
             ];
+
         } catch (\Exception $e) {
-            return ['success' => false, 'message' => 'Analisis heuristik gagal: ' . $e->getMessage(), 'method' => 'heuristic'];
+            Log::error("Heuristik v3.3 Gagal Total: " . $e->getMessage());
+            return ['success' => false, 'message' => $e->getMessage(), 'method' => 'heuristic_v3.3'];
         }
     }
 
-    private function findHeuristicDateSelector(Crawler $crawler, string $titleSelector): array
+    /**
+     * [MODIFIKASI v1.20.3] Metode ini sekarang melihat 2 level ke atas (kakek) untuk menemukan blok yang lebih akurat.
+     */
+    private function findArticleBlockSelectorViaReversePatternV2(Crawler $crawler): ?string
     {
-        // Kode ini tidak perlu diubah, sudah cukup baik dari versi sebelumnya.
-        $firstTitleNode = $crawler->filter($titleSelector)->first();
-        if ($firstTitleNode->count() === 0) return [];
-        $searchContainer = $firstTitleNode->closest('article, .post, .item, li, div, tr') ?? $crawler->filter('body')->first();
-        $dateSelectorCandidates = [];
-        $searchContainer->filter('*')->each(function (Crawler $node) use (&$dateSelectorCandidates) {
-            $text = '';
-            foreach ($node->getNode(0)->childNodes as $child) {
-                if ($child instanceof \DOMText) $text .= $child->nodeValue;
-            }
-            if (preg_match('/(\d{1,2}\s+[a-zA-Z\s]+\s+\d{4})|(\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{2,4})/i', trim($text))) {
-                $dateSelectorCandidates[] = $this->generateSelectorPath($node);
+        $grandparentSelectorPatterns = [];
+
+        $crawler->filter('a')->each(function(Crawler $link) use (&$grandparentSelectorPatterns) {
+            $text = trim($link->text());
+            if (mb_strlen($text) > 20 && mb_strlen($text) < 250 && !str_starts_with($link->attr('href') ?? '#', '#')) {
+                // Ambil parent dari link
+                $parent = $link->ancestors()->first();
+                if ($parent && $parent->count() > 0 && $parent->nodeName() !== 'body') {
+                    // Ambil "kakek"-nya (parent dari parent)
+                    $grandparent = $parent->ancestors()->first();
+                    if ($grandparent && $grandparent->count() > 0 && $grandparent->nodeName() !== 'body') {
+                        if ($selector = $this->generateSelectorPath($grandparent)) {
+                            $grandparentSelectorPatterns[] = $selector;
+                        }
+                    }
+                }
             }
         });
-        if (empty($dateSelectorCandidates)) return [];
-        $patternCounts = array_count_values(array_filter($dateSelectorCandidates));
+
+        if (count($grandparentSelectorPatterns) < 3) return null;
+        $patternCounts = array_count_values($grandparentSelectorPatterns);
         arsort($patternCounts);
-        return [key($patternCounts)];
+        return (reset($patternCounts) > 1) ? key($patternCounts) : null;
     }
+
+    private function findBestTitlePatternInBlocks(array $blocks): ?string
+    {
+        $patterns = [];
+        foreach ($blocks as $block) {
+            // [BUG FIX v1.20.2] Variabel $block sekarang di-pass ke dalam 'use'
+            $block->filter('a')->each(function (Crawler $link) use (&$patterns, $block) {
+                if (mb_strlen(trim($link->text())) > 25) {
+                    $patterns[] = $this->generateSelectorPath($link, $block);
+                }
+            });
+        }
+        if (empty($patterns)) return null;
+        $patternCounts = array_count_values(array_filter($patterns));
+        arsort($patternCounts);
+        return (reset($patternCounts) > 1) ? key($patternCounts) : null;
+    }
+    
+    private function findBestDatePatternInBlocks(array $blocks, string $titleSelector): ?string
+    {
+        $datePatterns = [];
+        foreach ($blocks as $block) {
+            if ($block->filter($titleSelector)->count() === 0) continue;
+            
+            $block->filter('*')->each(function (Crawler $node) use (&$datePatterns, $block) {
+                $text = '';
+                foreach ($node->getNode(0)->childNodes as $child) {
+                    if ($child instanceof \DOMText) { $text .= " " . $child->nodeValue; }
+                }
+                if (preg_match('/(\d{1,2}\s+[a-zA-Z\s]+\s+\d{4})|(\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{2,4})|kemarin|hari\s*ini/i', trim($text))) {
+                    $datePatterns[] = $this->generateSelectorPath($node, $block);
+                }
+            });
+        }
+        if (empty($datePatterns)) return null;
+        $patternCounts = array_count_values(array_filter($datePatterns));
+        arsort($patternCounts);
+        return key($patternCounts);
+    }
+
+    /**
+     * [BARU v1.20.2] Fungsi helper untuk strategi fallback (mirip AI v2).
+     */
+    private function findAllLinkPatterns(Crawler $crawler): array
+    {
+        $patterns = [];
+        $crawler->filter('a')->each(function (Crawler $link) use (&$patterns) {
+             $text = trim($link->text());
+            if (mb_strlen($text) > 25 && mb_strlen($text) < 250 && !str_starts_with($link->attr('href') ?? '#', '#')) {
+                if ($selector = $this->generateSelectorPath($link)) {
+                    $patterns[] = $selector;
+                }
+            }
+        });
+        return $patterns;
+    }
+
+    private function generateSelectorPath(Crawler $node, ?Crawler $boundaryNode = null): ?string
+    {
+        if ($node->count() === 0) return null;
+        $boundaryDomNode = $boundaryNode ? $boundaryNode->getNode(0) : null;
+        $path = [];
+        $currentNode = $node;
+
+        for ($i = 0; $i < 5; $i++) { // Batasi kedalaman agar tidak terlalu spesifik
+            $currentNodeDom = $currentNode->getNode(0);
+            if ($currentNode === null || $currentNode->count() === 0 || $currentNodeDom === $boundaryDomNode || $currentNode->nodeName() === 'body') break;
+            $nodeName = $currentNode->nodeName();
+            $selectorPart = $nodeName;
+
+            $classNames = trim($currentNode->attr('class'));
+            if ($classNames) {
+                $classList = preg_split('/\s+/', $classNames);
+                $selectorPart .= '.' . $classList[0]; // Ambil kelas pertama saja
+            }
+            array_unshift($path, $selectorPart);
+            $parentNode = $currentNode->ancestors()->first();
+            $currentNode = ($parentNode && $parentNode->count() > 0) ? $parentNode : null;
+        }
+        return implode(' > ', $path);
+    }
+
+    // --- METODE LAMA & METODE KAMUS (TIDAK BERUBAH) ---
 
     private function findMatchingDateSelectorFromDictionary(string $baseUrl, ?string $crawlUrlPath, string $titleSelector): array
     {
@@ -122,33 +221,7 @@ class SelectorSuggestionService
         }
         return [];
     }
-
-    private function generateSelectorPath(Crawler $node): ?string
-    {
-        if ($node->count() === 0) return null;
-        $path = [];
-        $currentNode = $node;
-        for ($i = 0; $i < 10; $i++) {
-            if ($currentNode === null || $currentNode->count() === 0 || $currentNode->nodeName() === 'body') break;
-            $nodeName = $currentNode->nodeName();
-            $id = $currentNode->attr('id');
-            $selectorPart = $nodeName;
-            if ($id) {
-                $selectorPart .= '#' . $id;
-                array_unshift($path, $selectorPart);
-                break;
-            } else {
-                $classNames = trim($currentNode->attr('class'));
-                if ($classNames) $selectorPart .= '.' . implode('.', preg_split('/\s+/', $classNames));
-            }
-            array_unshift($path, $selectorPart);
-            $domNode = $currentNode->getNode(0);
-            $parentNode = $domNode ? $domNode->parentNode : null;
-            $currentNode = $parentNode ? new Crawler($parentNode) : null;
-        }
-        return implode(' > ', $path);
-    }
-
+    
     public function getTitleSelectors(): array
     {
         return Cache::remember('suggestion_selectors_title', 3600, function () {

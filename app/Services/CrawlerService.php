@@ -6,6 +6,7 @@ use Illuminate\Support\Facades\Log;
 use Symfony\Component\BrowserKit\HttpBrowser;
 use Symfony\Component\DomCrawler\Crawler;
 use Symfony\Component\HttpClient\HttpClient;
+use Carbon\Carbon; // <-- [v1.20] Tambahkan use statement untuk Carbon
 
 class CrawlerService
 {
@@ -13,6 +14,8 @@ class CrawlerService
 
     public function __construct()
     {
+        // Set default timezone ke Asia/Jakarta agar parsing tanggal relatif akurat
+        date_default_timezone_set('Asia/Jakarta');
         $this->httpClient = HttpClient::create(['verify_peer' => false, 'verify_host' => false]);
     }
 
@@ -28,7 +31,7 @@ class CrawlerService
     }
 
     /**
-     * [REWORK TOTAL v1.19.8] Logika parsing dengan pendekatan pragmatis dan anti-gagal.
+     * [MODIFIKASI v1.20] Logika parsing tidak diubah di sini, fokus ada di `parseDateFromText`.
      */
     public function parseArticles(string $baseUrl, string $crawlUrlPath, string $titleSelector, ?string $dateSelector, ?string $linkSelector, int $limit = 20): array
     {
@@ -48,17 +51,17 @@ class CrawlerService
             $date = null;
 
             if ($dateSelector) {
+                // Mencari container terdekat yang paling logis untuk sebuah item artikel
                 $container = $titleNode->closest('article, .post, .item, li, div, tr');
                 if ($container && $container->count() > 0) {
                     $dateNode = $container->filter($dateSelector)->first();
                     if ($dateNode->count() > 0) {
-                        // [LOGIKA BARU] Coba semua kemungkinan dari node tanggal yang ditemukan.
                         $date = $this->extractDateFromCandidateNode($dateNode);
                     }
                 }
             }
             
-            // Fallback
+            // Fallback jika selector tanggal tidak disediakan atau gagal
             if (!$date) {
                 $date = $this->parseDateFromText($title);
             }
@@ -69,7 +72,10 @@ class CrawlerService
             if ($link) {
                 if (!preg_match('~^https?://~i', $link)) $link = rtrim($baseUrl, '/') . '/' . ltrim($link, '/');
                 if (filter_var($link, FILTER_VALIDATE_URL)) {
-                    $foundArticles[] = ['title' => $title, 'link' => $link, 'date' => $date];
+                    // Hanya tambahkan jika judul dan link tidak kosong
+                    if(!empty($title) && !empty($link)) {
+                       $foundArticles[] = ['title' => $title, 'link' => $link, 'date' => $date];
+                    }
                 }
             }
         });
@@ -77,28 +83,23 @@ class CrawlerService
         if (empty($foundArticles)) throw new \Exception("Tidak ada artikel valid yang berhasil diparsing.");
         return $foundArticles;
     }
-
+    
     /**
-     * [BARU v1.19.8] Metode Cerdas untuk mengekstrak tanggal dari satu node kandidat.
-     * Ia akan mencoba semua cara: atribut, teks, bahkan teks dari child node.
+     * Metode ini tidak diubah. Sudah cukup andal.
      */
     private function extractDateFromCandidateNode(Crawler $node): ?string
     {
-        // Prioritas 1: Atribut 'datetime' adalah yang paling bisa diandalkan.
         if ($node->attr('datetime')) {
-            $timestamp = strtotime($node->attr('datetime'));
-            if ($timestamp) return date('Y-m-d H:i:s', $timestamp);
+            $parsedDate = $this->parseDateFromText($node->attr('datetime'));
+            if ($parsedDate) return $parsedDate;
         }
 
-        // Prioritas 2: Teks dari node itu sendiri.
         $nodeText = $node->text();
         if (!empty(trim($nodeText))) {
             $parsedDate = $this->parseDateFromText($nodeText);
             if ($parsedDate) return $parsedDate;
         }
 
-        // Prioritas 3 (Jaring Pengaman): Jika node itu sendiri tidak punya teks (misal: <div><span>Tanggal</span></div>)
-        // Coba cari teks dari semua anak-anaknya.
         $childText = $node->filter('*')->each(function(Crawler $child) { return $child->text(); });
         if(!empty($childText)) {
             $parsedDate = $this->parseDateFromText(implode(' ', $childText));
@@ -108,33 +109,71 @@ class CrawlerService
         return null;
     }
 
+    /**
+     * [REWORK TOTAL v1.20] Mesin parsing tanggal yang jauh lebih andal menggunakan Carbon.
+     */
     private function parseDateFromText(?string $text): ?string
     {
-        // Kode ini tidak berubah, sudah cukup andal dari versi sebelumnya.
-        if (empty(trim($text))) return null;
-        $months = [
-            'januari' => '01', 'jan' => '01', 'january' => '01', 'februari' => '02', 'feb' => '02', 'february' => '02',
-            'maret' => '03', 'mar' => '03', 'march' => '03', 'april' => '04', 'apr' => '04', 'mei' => '05', 'may' => '05',
-            'juni' => '06', 'jun' => '06', 'june' => '06', 'juli' => '07', 'jul' => '07', 'july' => '07',
-            'agustus' => '08', 'agu' => '08', 'august' => '08', 'september' => '09', 'sep' => '09',
-            'oktober' => '10', 'okt' => '10', 'october' => '10', 'november' => '11', 'nov' => '11',
-            'desember' => '12', 'des' => '12', 'december' => '12'
+        if (empty(trim($text))) {
+            return null;
+        }
+
+        // 1. Bersihkan string dari noise yang umum
+        $cleanedText = str_ireplace(
+            ['|', 'Dipublikasikan pada', 'Published:', 'Posted on', 'tanggal:', ':', ' WIB', 'WITA', 'WIT'],
+            '',
+            $text
+        );
+        $cleanedText = trim($cleanedText);
+
+        // 2. Daftar prioritas pola regex dan format
+        $formats = [
+            // Format umum: Senin, 28 Juni 2025 15:30
+            '/\b(senin|selasa|rabu|kamis|jumat|sabtu|minggu),\s*(\d{1,2})\s*([a-z]+)\s*(\d{4})\s*(\d{2}:\d{2})\b/i' => function($m) { return "{$m[2]} {$m[3]} {$m[4]} {$m[5]}"; },
+            // Format umum: 28 Juni 2025 15:30
+            '/(\d{1,2})\s+([a-z]+)\s+(\d{4})\s+(\d{2}:\d{2})/i' => function($m) { return "{$m[1]} {$m[2]} {$m[3]} {$m[4]}"; },
+            // Format umum: 28 Juni 2025
+            '/(\d{1,2})\s+([a-z]+)\s+(\d{4})/i' => function($m) { return "{$m[1]} {$m[2]} {$m[3]}"; },
+            // Format dd/mm/yyyy atau dd-mm-yyyy
+            '/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/i' => function($m) { return "{$m[1]}-{$m[2]}-{$m[3]}"; },
+            // Format relatif: Kemarin, Hari ini, 2 jam yang lalu
+            '/(kemarin|hari\s*ini|\d+\s*(jam|menit|detik)\s*yang\s*lalu)/i' => function($m) { return $m[1]; },
         ];
-        $text = strtolower(trim($text));
-        $patternNamaBulan = '/(\d{1,2})\s+(' . implode('|', array_keys($months)) . ')\s+(\d{4})/i';
-        if (preg_match($patternNamaBulan, $text, $matches)) {
-            $day = str_pad($matches[1], 2, '0', STR_PAD_LEFT);
-            $month = $months[strtolower($matches[2])];
-            $year = $matches[3];
-            return date('Y-m-d H:i:s', strtotime("$year-$month-$day"));
+        
+        // 3. Terjemahan bulan dan kata kunci
+        $translations = [
+            'januari' => 'january', 'februari' => 'february', 'maret' => 'march', 'april' => 'april',
+            'mei' => 'may', 'juni' => 'june', 'juli' => 'july', 'agustus' => 'august',
+            'september' => 'september', 'oktober' => 'october', 'november' => 'november', 'desember' => 'december',
+            'jan' => 'jan', 'feb' => 'feb', 'mar' => 'mar', 'apr' => 'apr', 'mei' => 'may', 'jun' => 'jun',
+            'jul' => 'jul', 'agu' => 'aug', 'sep' => 'sep', 'okt' => 'oct', 'nov' => 'nov', 'des' => 'dec',
+            'hari ini' => 'today', 'kemarin' => 'yesterday', 'jam' => 'hours', 'menit' => 'minutes', 'detik' => 'seconds',
+            'yang lalu' => 'ago'
+        ];
+        
+        // Terjemahkan string ke Bahasa Inggris agar dapat diparsing Carbon
+        $englishText = str_ireplace(array_keys($translations), array_values($translations), strtolower($cleanedText));
+
+        // 4. Coba parsing dengan setiap pola
+        foreach ($formats as $pattern => $handler) {
+            if (preg_match($pattern, $englishText, $matches)) {
+                try {
+                    $dateString = $handler($matches);
+                    return Carbon::parse(trim($dateString))->toDateTimeString();
+                } catch (\Exception $e) {
+                    continue; // Jika format gagal, coba pola berikutnya
+                }
+            }
         }
-        $patternNumerik = '/(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})/';
-        if (preg_match($patternNumerik, $text, $matches)) {
-            $day = str_pad($matches[1], 2, '0', STR_PAD_LEFT);
-            $month = str_pad($matches[2], 2, '0', STR_PAD_LEFT);
-            $year = strlen($matches[3]) === 2 ? "20" . $matches[3] : $matches[3];
-            return date('Y-m-d H:i:s', strtotime("$year-$month-$day"));
+
+        // 5. Upaya terakhir jika tidak ada pola yang cocok, biarkan Carbon mencoba menebak
+        try {
+            // Kita coba parsing langsung string yang sudah diterjemahkan
+            return Carbon::parse($englishText)->toDateTimeString();
+        } catch (\Exception $e) {
+            // Jika semua gagal, kembalikan null
+            Log::warning("Gagal mem-parsing tanggal dari teks: '{$text}'", ['original' => $text, 'cleaned' => $cleanedText, 'english' => $englishText]);
+            return null;
         }
-        return null;
     }
 }
