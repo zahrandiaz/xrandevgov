@@ -12,11 +12,12 @@ use App\Jobs\CrawlSourceJob;
 use Illuminate\Http\Request;
 use App\Services\CrawlerService;
 use App\Services\SelectorSuggestionService;
-use Illuminate\Support\Str; // [BARU v1.21] Import Str
+use App\Services\ExperimentalSuggestionService; // [BARU v1.22] Impor service baru
+use Illuminate\Support\Str;
 
 class MonitoringSourceController extends Controller
 {
-    // ... (metode index hingga destroy tetap sama persis) ...
+    // ... (metode index hingga testSelector tetap sama) ...
     public function index()
     {
         $provinces = Region::where('type', 'Provinsi')
@@ -164,22 +165,30 @@ class MonitoringSourceController extends Controller
     }
 
     /**
-     * [MODIFIKASI v1.21] Menangani permintaan AJAX untuk saran selector dari berbagai strategi.
+     * [REFAKTOR v1.22] Memilih service yang sesuai berdasarkan strategi.
      */
-    public function suggestSelectorsAjax(Request $request, SelectorSuggestionService $suggestionService)
-    {
+    public function suggestSelectorsAjax(
+        Request $request,
+        SelectorSuggestionService $stableSuggestionService,
+        ExperimentalSuggestionService $experimentalSuggestionService
+    ) {
         $validatedData = $request->validate([
             'url' => 'required|url:http,https',
             'crawl_url' => 'nullable|string',
-            'strategy' => 'required|in:stable,experimental' // Parameter strategi baru
+            'strategy' => 'required|in:stable,experimental'
         ]);
 
-        // Panggil metode utama dari service dengan strategi yang dipilih
-        $result = $suggestionService->suggest(
-            $validatedData['url'],
-            $validatedData['crawl_url'],
-            $validatedData['strategy'] // Teruskan strategi ke service
-        );
+        $url = $validatedData['url'];
+        $crawlUrl = $validatedData['crawl_url'];
+        $result = [];
+
+        // Pilih service yang akan digunakan berdasarkan input strategi
+        if ($validatedData['strategy'] === 'experimental') {
+            $result = $experimentalSuggestionService->suggest($url, $crawlUrl);
+        } else {
+            // Default ke service stabil
+            $result = $stableSuggestionService->suggest($url, $crawlUrl);
+        }
 
         if (!$result['success']) {
             return response()->json([
@@ -196,9 +205,6 @@ class MonitoringSourceController extends Controller
         ]);
     }
     
-    /**
-     * [BARU v1.21] Menangani permintaan untuk fitur Inspektur DOM.
-     */
     public function inspectHtml(Request $request, CrawlerService $crawlerService)
     {
         $validatedData = $request->validate([
@@ -215,7 +221,6 @@ class MonitoringSourceController extends Controller
                 return response()->json(['success' => false, 'message' => 'Selector judul tidak ditemukan di halaman target.'], 404);
             }
 
-            // Ambil "kakek" dari judul sebagai blok cuplikan
             $block = $firstTitleNode->ancestors()->eq(1) ?? $firstTitleNode->ancestors()->first();
             
             if (!$block || $block->count() === 0) {
