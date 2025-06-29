@@ -18,7 +18,7 @@
 
             @if ($errors->any())
                 <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert">
-                    <strong class="font-bold">Oops!</strong>
+                    <strong class="font-bold">Oops! Ada masalah dengan input Anda:</strong>
                     <ul class="mt-3 list-disc list-inside text-sm">
                         @foreach ($errors->all() as $error)
                             <li>{{ $error }}</li>
@@ -30,6 +30,8 @@
             <form method="POST" action="{{ route('monitoring.sources.update', $source) }}">
                 @csrf
                 @method('PATCH')
+                
+                <h3 class="text-lg font-medium text-gray-900 border-b pb-2 mb-4">Informasi Dasar</h3>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
                         <label for="name" class="block font-medium text-sm text-gray-700">Nama Situs</label>
@@ -39,16 +41,14 @@
                         <label for="url" class="block font-medium text-sm text-gray-700">URL Utama Situs</label>
                         <input type="url" id="urlInput" name="url" value="{{ old('url', $source->url) }}" required class="block w-full mt-1 border-gray-300 rounded-md shadow-sm">
                     </div>
-                    
                     <div>
                         <label for="tipe_instansi" class="block font-medium text-sm text-gray-700">Tipe Instansi</label>
                         <select name="tipe_instansi" x-model="instansi" required class="block w-full mt-1 border-gray-300 rounded-md shadow-sm">
                             <option value="">-- Pilih Tipe --</option>
-                            <option value="BKD">BKD (Provinsi)</option>
-                            <option value="BKPSDM">BKPSDM (Kabupaten/Kota)</option>
+                            <option value="BKD" @selected(old('tipe_instansi', $source->tipe_instansi) == 'BKD')>BKD (Provinsi)</option>
+                            <option value="BKPSDM" @selected(old('tipe_instansi', $source->tipe_instansi) == 'BKPSDM')>BKPSDM (Kabupaten/Kota)</option>
                         </select>
                     </div>
-
                     <div>
                         <label for="region_id" class="block font-medium text-sm text-gray-700">Wilayah</label>
                         <select name="region_id" required class="block w-full mt-1 border-gray-300 rounded-md shadow-sm" :disabled="!instansi">
@@ -69,20 +69,31 @@
                             </template>
                         </select>
                     </div>
-                    
                     <div class="md:col-span-2">
                         <label for="crawl_url" class="block font-medium text-sm text-gray-700">URL Crawl Spesifik</label>
                         <input type="text" id="crawlUrlInput" name="crawl_url" value="{{ old('crawl_url', $source->crawl_url) }}" class="block w-full mt-1 border-gray-300 rounded-md shadow-sm">
                     </div>
-                    
-                    <div class="md:col-span-2">
-                         <label for="is_active" class="flex items-center">
+                </div>
+                
+                <h3 class="text-lg font-medium text-gray-900 border-b pb-2 mt-8 mb-4">Status & Konfigurasi</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <label for="site_status" class="block font-medium text-sm text-gray-700">Status Fungsional Situs</label>
+                        <select id="site_status" name="site_status" required class="block w-full mt-1 border-gray-300 rounded-md shadow-sm">
+                            <option value="Aktif" @selected(old('site_status', $source->site_status) == 'Aktif')>Aktif</option>
+                            <option value="URL Tidak Valid" @selected(old('site_status', $source->site_status) == 'URL Tidak Valid')>URL Tidak Valid</option>
+                            <option value="Tanpa Halaman Berita" @selected(old('site_status', $source->site_status) == 'Tanpa Halaman Berita')>Tanpa Halaman Berita</option>
+                            <option value="Lainnya" @selected(old('site_status', $source->site_status) == 'Lainnya')>Lainnya</option>
+                        </select>
+                    </div>
+                     <div class="md:col-span-2">
+                        <label for="is_active" class="flex items-center">
                             <input type="checkbox" id="is_active" name="is_active" value="1" @checked(old('is_active', $source->is_active))>
                             <span class="ms-2 text-sm text-gray-600">Situs Aktif (akan di-crawl)</span>
                         </label>
                     </div>
                 </div>
-                
+
                 <div class="mt-6 pt-6 border-t"
                      x-data="formHandler(
                         '{{ route('monitoring.sources.suggest_selectors_ajax') }}',
@@ -91,7 +102,8 @@
                         '{{ csrf_token() }}'
                      )">
                     <h3 class="text-lg font-medium">Konfigurasi Crawler</h3>
-                     <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
+                    <input type="hidden" name="suggestion_engine" id="suggestionEngineInput" value="{{ old('suggestion_engine', $source->suggestion_engine) }}">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
                         <div class="md:col-span-2">
                             <label for="preset_selector" class="block font-medium text-sm text-gray-700">Pilih Preset Selector</label>
                             <select id="presetSelector" @change="applyPreset($event)" class="block w-full mt-1 border-gray-300 rounded-md shadow-sm">
@@ -106,7 +118,7 @@
                             <input type="text" id="selectorTitleInput" name="selector_title" value="{{ old('selector_title', $source->selector_title) }}" required class="block w-full border-gray-300 rounded-md shadow-sm">
                         </div>
                         <div class="space-y-2">
-                            <label for="selector_date" class="block font-medium text-sm text-gray-700">Selector CSS Tanggal Berita</glabel>
+                            <label for="selector_date" class="block font-medium text-sm text-gray-700">Selector CSS Tanggal Berita</label>
                             <input type="text" id="selectorDateInput" name="selector_date" value="{{ old('selector_date', $source->selector_date) }}" class="block w-full border-gray-300 rounded-md shadow-sm">
                         </div>
                         <div class="space-y-2">
@@ -211,6 +223,11 @@
                         selectorTitleInput.value = data.title_selectors[0] || '';
                         selectorDateInput.value = data.date_selectors[0] || '';
                         
+                        // Mengisi hidden input dengan nama engine
+                        if (data.engine) {
+                            document.getElementById('suggestionEngineInput').value = data.engine;
+                        }
+
                         let dateMsg = data.date_selectors.length > 0 ? 'Selector tanggal juga ditemukan.' : 'Selector tanggal tidak ditemukan.';
                         this.statusMessage = `Sukses (${data.message}): Selector judul ditemukan. ${dateMsg}`;
                         this.statusClass = 'bg-green-100 text-green-800';
@@ -221,7 +238,7 @@
                     })
                     .finally(() => { this.loading = false; this.strategy = ''; });
                 },
-
+                
                 testSelectors() {
                     this.resetState();
                     const urlInput = document.getElementById('urlInput');
@@ -253,7 +270,7 @@
                     })
                     .then(response => {
                         testResultMessage.textContent = `Berhasil! ${response.data.message || 'Ditemukan ' + response.data.articles.length + ' artikel.'}`;
-                        testArticleList.innerHTML = ''; // Pastikan bersih sebelum mengisi
+                        testArticleList.innerHTML = '';
                         response.data.articles.forEach(article => {
                             const listItem = document.createElement('li');
                             listItem.innerHTML = `<strong>${article.title || 'Tanpa Judul'}</strong> (${article.date || 'Tanpa Tanggal'})`;

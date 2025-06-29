@@ -51,19 +51,28 @@
                         @foreach($uncategorizedSources as $source)
                         <div class="flex items-center justify-between p-3 bg-gray-50 rounded-md border">
                             <div class="flex items-center space-x-3">
-                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full {{ $source->is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800' }}">
-                                    {{ $source->is_active ? 'Aktif' : 'Nonaktif' }}
-                                </span>
+                                <div class="flex flex-col items-start space-y-1">
+                                    @php
+                                        $status_color = match($source->site_status) {
+                                            'Aktif' => 'bg-green-100 text-green-800',
+                                            'URL Tidak Valid' => 'bg-red-100 text-red-800',
+                                            'Tanpa Halaman Berita' => 'bg-yellow-100 text-yellow-800',
+                                            default => 'bg-gray-200 text-gray-800',
+                                        };
+                                    @endphp
+                                    <span class="px-2 py-0.5 inline-flex text-xs leading-5 font-semibold rounded-full {{ $status_color }}">
+                                        {{ $source->site_status }}
+                                    </span>
+                                    <span class="px-2 py-0.5 inline-flex text-xs leading-5 font-semibold rounded-full {{ $source->is_active ? 'bg-blue-100 text-blue-800' : 'bg-gray-200 text-gray-700' }}">
+                                        {{ $source->is_active ? 'Crawl ON' : 'Crawl OFF' }}
+                                    </span>
+                                </div>
                                 <div>
                                     <p class="text-sm font-medium text-gray-900">{{ $source->name }}</p>
                                     <p class="text-xs text-red-500 font-semibold">Wilayah belum diatur</p>
                                 </div>
                             </div>
                             <div class="flex items-center space-x-4 text-sm">
-                                <form action="{{ route('monitoring.sources.crawl_single', $source) }}" method="POST" x-data="{ submitting: false }" @submit="submitting = true">
-                                    @csrf
-                                    <button type="submit" :disabled="submitting" class="text-green-600 hover:text-green-900 disabled:opacity-50">Crawl</button>
-                                </form>
                                 <a href="{{ route('monitoring.sources.edit', $source) }}" class="text-indigo-600 hover:text-indigo-900">Edit</a>
                                 <form action="{{ route('monitoring.sources.destroy', $source) }}" method="POST" onsubmit="return confirm('Apakah Anda yakin ingin menghapus situs {{ addslashes($source->name) }}?')">
                                     @csrf
@@ -98,45 +107,44 @@
                                     <p class="text-sm text-gray-500">Tidak ada situs monitoring di provinsi ini.</p>
                                 @endif
                                 
-                                @foreach($province->monitoringSources as $source)
-                                    <div class="flex items-center justify-between p-3 bg-blue-50 rounded-md">
-                                        <div class="flex items-center space-x-3">
-                                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full {{ $source->is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800' }}">
-                                                {{ $source->is_active ? 'Aktif' : 'Nonaktif' }}
-                                            </span>
-                                            <div>
-                                                <p class="text-sm font-medium text-gray-900">{{ $source->name }}</p>
-                                                <p class="text-xs text-blue-600 font-semibold">{{ $source->region->name ?? 'N/A' }} (BKD Provinsi)</p>
-                                            </div>
-                                        </div>
-                                        <div class="flex items-center space-x-4 text-sm">
-                                            <form action="{{ route('monitoring.sources.crawl_single', $source) }}" method="POST" x-data="{ submitting: false }" @submit="submitting = true">
-                                                @csrf
-                                                <button type="submit" :disabled="submitting" class="text-green-600 hover:text-green-900 disabled:opacity-50">Crawl</button>
-                                            </form>
-                                            <a href="{{ route('monitoring.sources.edit', $source) }}" class="text-indigo-600 hover:text-indigo-900">Edit</a>
-                                            <form action="{{ route('monitoring.sources.destroy', $source) }}" method="POST" onsubmit="return confirm('Apakah Anda yakin ingin menghapus situs {{ addslashes($source->name) }}?')">
-                                                @csrf
-                                                @method('DELETE')
-                                                <button type="submit" class="text-red-600 hover:text-red-900">Hapus</button>
-                                            </form>
-                                        </div>
-                                    </div>
-                                @endforeach
+                                @php
+                                    // Gabungkan semua situs (provinsi dan kab/kota) dan urutkan berdasarkan nama
+                                    $allSources = $province->monitoringSources->merge($province->children->flatMap->monitoringSources)->sortBy('name');
+                                @endphp
 
-                                @foreach($province->children as $kabkota)
-                                    @foreach($kabkota->monitoringSources as $source)
-                                    <div class="flex items-center justify-between p-3 bg-gray-50 rounded-md">
+                                @foreach($allSources as $source)
+                                    <div class="flex items-center justify-between p-3 {{ $source->tipe_instansi === 'BKD' ? 'bg-blue-50' : 'bg-gray-50' }} rounded-md">
                                         <div class="flex items-center space-x-3">
-                                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full {{ $source->is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800' }}">
-                                                {{ $source->is_active ? 'Aktif' : 'Nonaktif' }}
-                                            </span>
+                                             <div class="flex flex-col items-start space-y-1">
+                                                @php
+                                                    $status_color = match($source->site_status) {
+                                                        'Aktif' => 'bg-green-100 text-green-800',
+                                                        'URL Tidak Valid' => 'bg-red-100 text-red-800',
+                                                        'Tanpa Halaman Berita' => 'bg-yellow-100 text-yellow-800',
+                                                        default => 'bg-gray-200 text-gray-800',
+                                                    };
+                                                @endphp
+                                                <span class="px-2 py-0.5 inline-flex text-xs leading-5 font-semibold rounded-full {{ $status_color }}">
+                                                    {{ $source->site_status }}
+                                                </span>
+                                                <span class="px-2 py-0.5 inline-flex text-xs leading-5 font-semibold rounded-full {{ $source->is_active ? 'bg-blue-100 text-blue-800' : 'bg-gray-200 text-gray-700' }}">
+                                                    {{ $source->is_active ? 'Crawl ON' : 'Crawl OFF' }}
+                                                </span>
+                                            </div>
                                             <div>
                                                 <p class="text-sm font-medium text-gray-900">{{ $source->name }}</p>
-                                                <p class="text-xs text-gray-500">{{ $source->region->name ?? 'N/A' }} (BKPSDM)</p>
+                                                <div class="flex items-center space-x-2">
+                                                    <p class="text-xs {{ $source->tipe_instansi === 'BKD' ? 'text-blue-600' : 'text-gray-500' }} font-semibold">{{ $source->region->name ?? 'N/A' }} ({{$source->tipe_instansi}})</p>
+                                                    @if($source->suggestion_engine)
+                                                    <span class="px-1.5 py-0.5 text-xs font-medium rounded-md bg-indigo-100 text-indigo-800">{{ $source->suggestion_engine }}</span>
+                                                    @endif
+                                                </div>
                                             </div>
                                         </div>
                                         <div class="flex items-center space-x-4 text-sm">
+                                            <a href="{{ $source->url }}" target="_blank" class="text-gray-500 hover:text-gray-800" title="Kunjungi Situs">
+                                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M11 3a1 1 0 100 2h2.586l-6.293 6.293a1 1 0 101.414 1.414L15 6.414V9a1 1 0 102 0V4a1 1 0 00-1-1h-5z" /><path d="M5 5a2 2 0 00-2 2v8a2 2 0 002 2h8a2 2 0 002-2v-3a1 1 0 10-2 0v3H5V7h3a1 1 0 000-2H5z" /></svg>
+                                            </a>
                                             <form action="{{ route('monitoring.sources.crawl_single', $source) }}" method="POST" x-data="{ submitting: false }" @submit="submitting = true">
                                                 @csrf
                                                 <button type="submit" :disabled="submitting" class="text-green-600 hover:text-green-900 disabled:opacity-50">Crawl</button>
@@ -149,7 +157,6 @@
                                             </form>
                                         </div>
                                     </div>
-                                    @endforeach
                                 @endforeach
                             </div>
                         </div>

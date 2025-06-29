@@ -14,6 +14,7 @@ use App\Services\CrawlerService;
 use App\Services\SelectorSuggestionService;
 use App\Services\ExperimentalSuggestionService; // [BARU v1.22] Impor service baru
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 
 class MonitoringSourceController extends Controller
 {
@@ -57,28 +58,12 @@ class MonitoringSourceController extends Controller
 
     public function store(Request $request)
     {
-        $validatedData = $request->validate([
-            'name' => 'required|string|max:255',
-            'url' => 'required|url:http,https|unique:monitoring_sources,url',
-            'tipe_instansi' => 'required|in:BKD,BKPSDM',
-            'region_id' => ['required', 'exists:regions,id',
-                function ($attribute, $value, $fail) use ($request) {
-                    $region = Region::find($value);
-                    if (!$region) return;
-                    if ($request->input('tipe_instansi') == 'BKD' && $region->type !== 'Provinsi') {
-                        $fail('Untuk tipe BKD, wilayah yang dipilih harus berupa Provinsi.');
-                    }
-                    if ($request->input('tipe_instansi') == 'BKPSDM' && $region->type !== 'Kabupaten/Kota') {
-                        $fail('Untuk tipe BKPSDM, wilayah yang dipilih harus berupa Kabupaten/Kota.');
-                    }
-                },
-            ],
-            'crawl_url' => 'nullable|string', 'selector_title' => 'required|string',
-            'selector_date' => 'nullable|string', 'selector_link' => 'nullable|string',
-        ]);
+        $validatedData = $this->validateSourceData($request);
         
         if (!preg_match("~^(?:f|ht)tps?://~i", $validatedData['url'])) { $validatedData['url'] = "https://" . $validatedData['url']; }
         if (empty($validatedData['crawl_url'])) { $validatedData['crawl_url'] = '/'; }
+        
+        $validatedData['is_active'] = $request->has('is_active');
 
         MonitoringSource::create($validatedData);
 
@@ -96,12 +81,33 @@ class MonitoringSourceController extends Controller
 
     public function update(Request $request, MonitoringSource $source)
     {
-        $validatedData = $request->validate([
+        $validatedData = $this->validateSourceData($request, $source->id);
+        
+        if (!preg_match("~^(?:f|ht)tps?://~i", $validatedData['url'])) { $validatedData['url'] = "https://" . $validatedData['url']; }
+        if (empty($validatedData['crawl_url'])) { $validatedData['crawl_url'] = '/'; }
+        
+        $validatedData['is_active'] = $request->has('is_active');
+        $source->update($validatedData);
+
+        return redirect()->route('monitoring.sources.index')->with('success', 'Situs monitoring berhasil diperbarui!');
+    }
+    
+    // [BARU v1.26.0] Helper untuk sentralisasi validasi
+    private function validateSourceData(Request $request, $sourceId = null)
+    {
+        $urlRule = 'required|url:http,https';
+        if ($sourceId) {
+            $urlRule .= '|unique:monitoring_sources,url,' . $sourceId;
+        } else {
+            $urlRule .= '|unique:monitoring_sources,url';
+        }
+
+        return $request->validate([
             'name' => 'required|string|max:255',
-            'url' => 'required|url:http,https|unique:monitoring_sources,url,'.$source->id,
+            'url' => $urlRule,
             'tipe_instansi' => 'required|in:BKD,BKPSDM',
             'region_id' => ['required', 'exists:regions,id',
-                 function ($attribute, $value, $fail) use ($request) {
+                function ($attribute, $value, $fail) use ($request) {
                     $region = Region::find($value);
                     if (!$region) return;
                     if ($request->input('tipe_instansi') == 'BKD' && $region->type !== 'Provinsi') {
@@ -112,17 +118,14 @@ class MonitoringSourceController extends Controller
                     }
                 },
             ],
-            'crawl_url' => 'nullable|string', 'selector_title' => 'required|string',
-            'selector_date' => 'nullable|string', 'selector_link' => 'nullable|string',
+            'crawl_url' => 'nullable|string',
+            'selector_title' => 'required|string',
+            'selector_date' => 'nullable|string',
+            'selector_link' => 'nullable|string',
+            'is_active' => 'nullable|boolean',
+            'suggestion_engine' => ['nullable', 'string', Rule::in(['Manual', 'Kamus', 'Stabil v3', 'Eksperimental v4'])],
+            'site_status' => ['required', 'string', Rule::in(['Aktif', 'URL Tidak Valid', 'Tanpa Halaman Berita', 'Lainnya'])],
         ]);
-        
-        if (!preg_match("~^(?:f|ht)tps?://~i", $validatedData['url'])) { $validatedData['url'] = "https://" . $validatedData['url']; }
-        if (empty($validatedData['crawl_url'])) { $validatedData['crawl_url'] = '/'; }
-        
-        $validatedData['is_active'] = $request->has('is_active');
-        $source->update($validatedData);
-
-        return redirect()->route('monitoring.sources.index')->with('success', 'Situs monitoring berhasil diperbarui!');
     }
 
     public function destroy(MonitoringSource $source)
@@ -132,6 +135,54 @@ class MonitoringSourceController extends Controller
                          ->with('success', 'Situs monitoring berhasil dihapus!');
     }
     
+    public function suggestSelectorsAjax(
+        Request $request,
+        SelectorSuggestionService $stableSuggestionService,
+        ExperimentalSuggestionService $experimentalSuggestionService
+    ) {
+        $validatedData = $request->validate([
+            'url' => 'required|url:http,https',
+            'crawl_url' => 'nullable|string',
+            'strategy' => 'required|in:stable,experimental'
+        ]);
+
+        $url = $validatedData['url'];
+        $crawlUrl = $validatedData['crawl_url'];
+        $result = [];
+
+        if ($validatedData['strategy'] === 'experimental') {
+            $result = $experimentalSuggestionService->suggest($url, $crawlUrl);
+        } else {
+            $result = $stableSuggestionService->suggest($url, $crawlUrl);
+        }
+
+        if (!$result['success']) {
+            return response()->json([
+                'success' => false,
+                'message' => $result['message'] ?? 'Tidak ada selector yang cocok ditemukan.'
+            ], 404);
+        }
+
+        // [MODIFIKASI v1.26.0] Mengirimkan nama engine yang lebih ramah pengguna
+        $engineName = 'Manual';
+        if (str_contains($result['method'], 'dictionary')) {
+            $engineName = 'Kamus';
+        } elseif (str_contains($result['method'], 'v3')) {
+            $engineName = 'Stabil v3';
+        } elseif (str_contains($result['method'], 'v4')) {
+            $engineName = 'Eksperimental v4';
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Analisis ' . Str::studly($result['method']) . ' selesai.',
+            'title_selectors' => $result['title_selectors'],
+            'date_selectors' => $result['date_selectors'],
+            'engine' => $engineName, // Kirim nama engine ke frontend
+        ]);
+    }
+
+
     public function testSelector(Request $request, CrawlerService $crawlerService)
     {
         $validatedData = $request->validate([
@@ -162,47 +213,6 @@ class MonitoringSourceController extends Controller
         } catch (\Exception $e) {
             return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
         }
-    }
-
-    /**
-     * [REFAKTOR v1.22] Memilih service yang sesuai berdasarkan strategi.
-     */
-    public function suggestSelectorsAjax(
-        Request $request,
-        SelectorSuggestionService $stableSuggestionService,
-        ExperimentalSuggestionService $experimentalSuggestionService
-    ) {
-        $validatedData = $request->validate([
-            'url' => 'required|url:http,https',
-            'crawl_url' => 'nullable|string',
-            'strategy' => 'required|in:stable,experimental'
-        ]);
-
-        $url = $validatedData['url'];
-        $crawlUrl = $validatedData['crawl_url'];
-        $result = [];
-
-        // Pilih service yang akan digunakan berdasarkan input strategi
-        if ($validatedData['strategy'] === 'experimental') {
-            $result = $experimentalSuggestionService->suggest($url, $crawlUrl);
-        } else {
-            // Default ke service stabil
-            $result = $stableSuggestionService->suggest($url, $crawlUrl);
-        }
-
-        if (!$result['success']) {
-            return response()->json([
-                'success' => false,
-                'message' => $result['message'] ?? 'Tidak ada selector yang cocok ditemukan.'
-            ], 404);
-        }
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Analisis ' . Str::studly($result['method']) . ' selesai.',
-            'title_selectors' => $result['title_selectors'],
-            'date_selectors' => $result['date_selectors']
-        ]);
     }
     
     public function inspectHtml(Request $request, CrawlerService $crawlerService)

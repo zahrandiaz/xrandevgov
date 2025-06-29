@@ -29,6 +29,7 @@
 
             <form method="POST" action="{{ route('monitoring.sources.store') }}">
                 @csrf
+                <h3 class="text-lg font-medium text-gray-900 border-b pb-2 mb-4">Informasi Dasar</h3>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
                         <label for="name" class="block font-medium text-sm text-gray-700">Nama Situs</label>
@@ -72,6 +73,25 @@
                     </div>
                 </div>
 
+                <h3 class="text-lg font-medium text-gray-900 border-b pb-2 mt-8 mb-4">Status & Konfigurasi</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <label for="site_status" class="block font-medium text-sm text-gray-700">Status Fungsional Situs</label>
+                        <select name="site_status" required class="block w-full mt-1 border-gray-300 rounded-md shadow-sm">
+                            <option value="Aktif" @selected(old('site_status', 'Aktif') == 'Aktif')>Aktif</option>
+                            <option value="URL Tidak Valid" @selected(old('site_status') == 'URL Tidak Valid')>URL Tidak Valid</option>
+                            <option value="Tanpa Halaman Berita" @selected(old('site_status') == 'Tanpa Halaman Berita')>Tanpa Halaman Berita</option>
+                            <option value="Lainnya" @selected(old('site_status') == 'Lainnya')>Lainnya</option>
+                        </select>
+                    </div>
+                     <div class="md:col-span-2">
+                        <label for="is_active" class="flex items-center">
+                            <input type="checkbox" id="is_active" name="is_active" value="1" @checked(old('is_active', true))>
+                            <span class="ms-2 text-sm text-gray-600">Situs Aktif (akan di-crawl)</span>
+                        </label>
+                    </div>
+                </div>
+
                 <div class="mt-6 pt-6 border-t" 
                      x-data="formHandler(
                         '{{ route('monitoring.sources.suggest_selectors_ajax') }}',
@@ -80,6 +100,7 @@
                         '{{ csrf_token() }}'
                      )">
                     <h3 class="text-lg font-medium">Konfigurasi Crawler</h3>
+                    <input type="hidden" name="suggestion_engine" id="suggestionEngineInput" value="Manual">
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
                         <div class="md:col-span-2">
                             <label for="preset_selector" class="block font-medium text-sm text-gray-700">Pilih Preset Selector</label>
@@ -200,6 +221,11 @@
                         selectorTitleInput.value = data.title_selectors[0] || '';
                         selectorDateInput.value = data.date_selectors[0] || '';
                         
+                        // Mengisi hidden input dengan nama engine
+                        if (data.engine) {
+                            document.getElementById('suggestionEngineInput').value = data.engine;
+                        }
+
                         let dateMsg = data.date_selectors.length > 0 ? 'Selector tanggal juga ditemukan.' : 'Selector tanggal tidak ditemukan.';
                         this.statusMessage = `Sukses (${data.message}): Selector judul ditemukan. ${dateMsg}`;
                         this.statusClass = 'bg-green-100 text-green-800';
@@ -210,8 +236,7 @@
                     })
                     .finally(() => { this.loading = false; this.strategy = ''; });
                 },
-
-                // [PERBAIKAN v1.25.0] Mengimplementasikan logika testSelectors yang hilang
+                
                 testSelectors() {
                     this.resetState();
                     const urlInput = document.getElementById('urlInput');

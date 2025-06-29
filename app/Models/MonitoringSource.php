@@ -9,9 +9,8 @@ class MonitoringSource extends Model
 {
     use HasFactory;
 
-    // Tambahkan ini agar kolom bisa diisi secara massal
     protected $fillable = [
-        'region_id', // Tambahkan ini
+        'region_id',
         'tipe_instansi',
         'name',
         'url',
@@ -21,17 +20,16 @@ class MonitoringSource extends Model
         'selector_link',
         'last_crawled_at',
         'is_active',
-        'last_crawl_status',    // [BARU] Tambahkan ini
-        'consecutive_failures', // [BARU] Tambahkan ini
+        'last_crawl_status',
+        'consecutive_failures',
+        'suggestion_engine', // [BARU v1.26.0]
+        'site_status',       // [BARU v1.26.0]
     ];
 
     protected $casts = [
-        'last_crawled_at' => 'datetime', // TAMBAHKAN BARIS INI
+        'last_crawled_at' => 'datetime',
     ];
 
-    /**
-     * Get the region that the monitoring source belongs to.
-     */
     public function region()
     {
         return $this->belongsTo(Region::class);
