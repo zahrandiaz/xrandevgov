@@ -7,9 +7,6 @@ use Symfony\Component\DomCrawler\Crawler;
 
 class ExperimentalSuggestionService extends BaseSuggestionEngine
 {
-    /**
-     * [REFAKTOR v1.23] Metode utama untuk menjalankan mesin heuristik eksperimental v4.
-     */
     public function suggest(string $baseUrl, ?string $crawlUrlPath): array
     {
         try {
@@ -26,29 +23,74 @@ class ExperimentalSuggestionService extends BaseSuggestionEngine
             $bestTitlePattern = key($patternCounts);
             $bestDatePattern = null;
 
-            $blockSelector = $this->findArticleBlockSelector($crawler);
-            if ($blockSelector) {
-                $articleBlocks = $crawler->filter($blockSelector)->each(fn ($node) => $node);
-                if (count($articleBlocks) >= 3) {
-                    $bestDatePattern = $this->findDatePatternExhaustivelyInBlocks($articleBlocks, $bestTitlePattern);
+            // Prioritas 0: Cari tanggal di dalam blok "meta" yang umum.
+            $bestDatePattern = $this->findDatePatternInMetaBlocks($crawler, $bestTitlePattern);
+
+            if (!$bestDatePattern) {
+                Log::info("Heuristik v4.4: Gagal menemukan tanggal di blok meta, mencoba analisis blok artikel.");
+                $blockSelector = $this->findArticleBlockSelector($crawler);
+                if ($blockSelector) {
+                    $articleBlocks = $crawler->filter($blockSelector)->each(fn ($node) => $node);
+                    if (count($articleBlocks) >= 3) {
+                        $bestDatePattern = $this->findDatePatternExhaustivelyInBlocks($articleBlocks, $bestTitlePattern);
+                    }
                 }
             }
             
             if (!$bestDatePattern) {
-                Log::info("Heuristik v4.2: Gagal menemukan tanggal di blok, mencoba analisis Sibling.");
+                Log::info("Heuristik v4.4: Gagal menemukan tanggal di blok, mencoba analisis Sibling.");
                 $bestDatePattern = $this->findDatePatternViaSiblingAnalysis($crawler, $bestTitlePattern);
             }
 
             if (!$bestDatePattern) {
-                Log::info("Heuristik v4.2: Analisis Sibling gagal, mencoba pencarian Global.");
+                Log::info("Heuristik v4.4: Analisis Sibling gagal, mencoba pencarian Global.");
                 $bestDatePattern = $this->findAnyDatePatternInDocument($crawler);
             }
 
-            return ['success' => true, 'title_selectors' => [$bestTitlePattern], 'date_selectors' => $bestDatePattern ? [$bestDatePattern] : [], 'method' => 'heuristic_v4.2'];
+            return ['success' => true, 'title_selectors' => [$bestTitlePattern], 'date_selectors' => $bestDatePattern ? [$bestDatePattern] : [], 'method' => 'heuristic_v4.4'];
         } catch (\Exception $e) {
-            Log::error("Heuristik v4.2 (Eksperimental) Gagal Total: " . $e->getMessage());
-            return ['success' => false, 'message' => $e->getMessage(), 'method' => 'heuristic_v4.2'];
+            Log::error("Heuristik v4.4 (Eksperimental) Gagal Total: " . $e->getMessage());
+            return ['success' => false, 'message' => $e->getMessage(), 'method' => 'heuristic_v4.4'];
         }
+    }
+
+    /**
+     * [FINAL REWORK v1.24] Mencari elemen *paling spesifik* di dalam blok meta.
+     */
+    private function findDatePatternInMetaBlocks(Crawler $crawler, string $titleSelector): ?string
+    {
+        $firstTitleNode = $crawler->filter($titleSelector)->first();
+        if ($firstTitleNode->count() === 0) return null;
+
+        $container = $firstTitleNode->closest('article, .post, .item, li, div');
+        if(!$container || $container->count() === 0) return null;
+
+        $metaBlock = $container->filter('.post-meta, .entry-meta, .meta-info, .byline, .post-info, .posted-on')->first();
+        if($metaBlock->count() > 0){
+            $datePatterns = [];
+            
+            // Iterasi di dalam blok meta untuk menemukan elemen yang paling pas
+            $metaBlock->filter('*')->each(function (Crawler $node) use (&$datePatterns, $container) {
+                 if (preg_match('/(\d{1,2}\s+[a-zA-Z\s]+\s+\d{4})|(\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{2,4})|kemarin|hari\s*ini|\d+\s*.*\s*(ago|lalu)/i', trim($node->text()))) {
+                    if ($path = $this->generateSelectorPath($node, $container)) {
+                        $datePatterns[] = $path;
+                    }
+                }
+            });
+
+            if (empty($datePatterns)) return null;
+            
+            // Pilih path yang paling spesifik (terpanjang)
+            $longestPath = '';
+            foreach($datePatterns as $path) {
+                if(strlen($path) > strlen($longestPath)) {
+                    $longestPath = $path;
+                }
+            }
+            return $longestPath;
+        }
+
+        return null;
     }
 
     private function findDatePatternExhaustivelyInBlocks(array $blocks, string $titleSelector): ?string
