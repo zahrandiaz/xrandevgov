@@ -30,6 +30,10 @@
                 <a href="{{ route('suggestion-selectors.index') }}" class="bg-orange-500 text-white p-4 rounded-lg shadow hover:bg-orange-600 text-center flex items-center justify-center">
                     <span class="font-semibold">Manajemen Kamus</span>
                 </a>
+                {{-- [BARU v1.27.0] Tambahkan link ini --}}
+                <a href="{{ route('trackers.index') }}" class="bg-cyan-500 text-white p-4 rounded-lg shadow hover:bg-cyan-600 text-center flex items-center justify-center">
+                    <span class="font-semibold">Pantauan Pengumuman</span>
+                </a>
                 <a href="{{ route('logout') }}" class="bg-red-500 text-white p-4 rounded-lg shadow hover:bg-red-600 text-center flex items-center justify-center col-span-2 md:col-span-1 lg:col-span-2">
                     <span class="font-semibold">Logout</span>
                 </a>

@@ -65,6 +65,9 @@ Route::middleware('access.code')->group(function () {
     // [BARU] Rute untuk manajemen Kamus Selector Saran (CRUD)
     Route::resource('suggestion-selectors', SuggestionSelectorController::class)->except(['show']);
 
+    // [BARU v1.27.0] Rute untuk Manajemen Pantauan Pengumuman
+    Route::resource('trackers', \App\Http\Controllers\TrackerController::class);
+
     // Rute untuk fitur impor data
     Route::prefix('import')->name('import.')->group(function () {
         Route::get('/sources', [\App\Http\Controllers\ImportController::class, 'showSourcesForm'])->name('sources.show');
