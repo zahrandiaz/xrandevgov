@@ -211,9 +211,50 @@
                     .finally(() => { this.loading = false; this.strategy = ''; });
                 },
 
+                // [PERBAIKAN v1.25.0] Mengimplementasikan logika testSelectors yang hilang
                 testSelectors() {
                     this.resetState();
-                    // ... (logika fungsi testSelectors tidak berubah)
+                    const urlInput = document.getElementById('urlInput');
+                    const crawlUrlInput = document.getElementById('crawlUrlInput');
+                    const selectorTitleInput = document.getElementById('selectorTitleInput');
+                    const selectorDateInput = document.getElementById('selectorDateInput');
+                    const selectorLinkInput = document.getElementById('selectorLinkInput');
+                    const testResultMessage = document.getElementById('testResultMessage');
+                    const testArticleList = document.getElementById('testArticleList');
+
+                    if (!urlInput.value || !selectorTitleInput.value) {
+                        alert('URL dan Selector Judul wajib diisi untuk pengujian.');
+                        return;
+                    }
+
+                    this.loading = true;
+                    this.strategy = 'test';
+                    this.showTestResult = true;
+                    testResultMessage.textContent = 'Menguji...';
+                    testArticleList.innerHTML = '';
+                    
+                    axios.post(testUrl, {
+                        url: urlInput.value,
+                        crawl_url: crawlUrlInput.value,
+                        selector_title: selectorTitleInput.value,
+                        selector_date: selectorDateInput.value,
+                        selector_link: selectorLinkInput.value,
+                        _token: csrfToken
+                    })
+                    .then(response => {
+                        testResultMessage.textContent = `Berhasil! ${response.data.message || 'Ditemukan ' + response.data.articles.length + ' artikel.'}`;
+                        testArticleList.innerHTML = '';
+                        response.data.articles.forEach(article => {
+                            const listItem = document.createElement('li');
+                            listItem.innerHTML = `<strong>${article.title || 'Tanpa Judul'}</strong> (${article.date || 'Tanpa Tanggal'})`;
+                            testArticleList.appendChild(listItem);
+                        });
+                    })
+                    .catch(error => {
+                        testResultMessage.textContent = `Gagal: ${error.response?.data?.message || error.message}`;
+                        testArticleList.innerHTML = '';
+                    })
+                    .finally(() => { this.loading = false; this.strategy = ''; });
                 },
                 
                 inspectHtml() {

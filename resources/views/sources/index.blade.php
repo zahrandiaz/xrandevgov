@@ -59,17 +59,17 @@
                                     <p class="text-xs text-red-500 font-semibold">Wilayah belum diatur</p>
                                 </div>
                             </div>
-                            <div class="flex items-center space-x-3 text-sm">
-                                <form action="{{ route('monitoring.sources.crawl_single', $source) }}" method="POST" x-data="{ submitting: false }" @submit="submitting = true" onsubmit="return confirm('Mulai crawling untuk situs {{ $source->name }}?')">
+                            <div class="flex items-center space-x-4 text-sm">
+                                <form action="{{ route('monitoring.sources.crawl_single', $source) }}" method="POST" x-data="{ submitting: false }" @submit="submitting = true">
                                     @csrf
-                                    <button type="submit" 
-                                            :disabled="submitting"
-                                            class="text-green-600 hover:text-green-900 disabled:opacity-50 disabled:cursor-not-allowed">
-                                        <span x-show="!submitting">Crawl Sekarang</span>
-                                        <span x-show="submitting">Memproses...</span>
-                                    </button>
+                                    <button type="submit" :disabled="submitting" class="text-green-600 hover:text-green-900 disabled:opacity-50">Crawl</button>
                                 </form>
                                 <a href="{{ route('monitoring.sources.edit', $source) }}" class="text-indigo-600 hover:text-indigo-900">Edit</a>
+                                <form action="{{ route('monitoring.sources.destroy', $source) }}" method="POST" onsubmit="return confirm('Apakah Anda yakin ingin menghapus situs {{ addslashes($source->name) }}?')">
+                                    @csrf
+                                    @method('DELETE')
+                                    <button type="submit" class="text-red-600 hover:text-red-900">Hapus</button>
+                                </form>
                             </div>
                         </div>
                         @endforeach
@@ -81,7 +81,6 @@
                     @forelse($provinces as $province)
                         <div x-data="{ open: false }" class="bg-white border border-gray-200 rounded-lg">
                             <div @click="open = !open" class="p-4 flex justify-between items-center cursor-pointer hover:bg-gray-50">
-                                {{-- [MODIFIKASI] Tampilkan nama provinsi dan jumlah situs --}}
                                 <div class="flex items-center space-x-3">
                                     <h3 class="text-lg font-medium text-gray-900">{{ $province->name }}</h3>
                                     @if($province->total_sites_count > 0)
@@ -94,11 +93,11 @@
                                 <svg x-show="open" class="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path></svg>
                             </div>
 
-                            <div x-show="open" class="border-t border-gray-200 p-4 space-y-3">
+                            <div x-show="open" x-transition class="border-t border-gray-200 p-4 space-y-3">
                                 @if($province->total_sites_count === 0)
                                     <p class="text-sm text-gray-500">Tidak ada situs monitoring di provinsi ini.</p>
                                 @endif
-                                {{-- Situs BKD level Provinsi --}}
+                                
                                 @foreach($province->monitoringSources as $source)
                                     <div class="flex items-center justify-between p-3 bg-blue-50 rounded-md">
                                         <div class="flex items-center space-x-3">
@@ -110,22 +109,21 @@
                                                 <p class="text-xs text-blue-600 font-semibold">{{ $source->region->name ?? 'N/A' }} (BKD Provinsi)</p>
                                             </div>
                                         </div>
-                                        <div class="flex items-center space-x-3 text-sm">
-                                            <form action="{{ route('monitoring.sources.crawl_single', $source) }}" method="POST" x-data="{ submitting: false }" @submit="submitting = true" onsubmit="return confirm('Mulai crawling untuk situs {{ $source->name }}?')">
+                                        <div class="flex items-center space-x-4 text-sm">
+                                            <form action="{{ route('monitoring.sources.crawl_single', $source) }}" method="POST" x-data="{ submitting: false }" @submit="submitting = true">
                                                 @csrf
-                                                <button type="submit" 
-                                                        :disabled="submitting"
-                                                        class="text-green-600 hover:text-green-900 disabled:opacity-50 disabled:cursor-not-allowed">
-                                                    <span x-show="!submitting">Crawl Sekarang</span>
-                                                    <span x-show="submitting">Memproses...</span>
-                                                </button>
+                                                <button type="submit" :disabled="submitting" class="text-green-600 hover:text-green-900 disabled:opacity-50">Crawl</button>
                                             </form>
                                             <a href="{{ route('monitoring.sources.edit', $source) }}" class="text-indigo-600 hover:text-indigo-900">Edit</a>
+                                            <form action="{{ route('monitoring.sources.destroy', $source) }}" method="POST" onsubmit="return confirm('Apakah Anda yakin ingin menghapus situs {{ addslashes($source->name) }}?')">
+                                                @csrf
+                                                @method('DELETE')
+                                                <button type="submit" class="text-red-600 hover:text-red-900">Hapus</button>
+                                            </form>
                                         </div>
                                     </div>
                                 @endforeach
 
-                                {{-- Situs BKPSDM level Kab/Kota --}}
                                 @foreach($province->children as $kabkota)
                                     @foreach($kabkota->monitoringSources as $source)
                                     <div class="flex items-center justify-between p-3 bg-gray-50 rounded-md">
@@ -138,17 +136,17 @@
                                                 <p class="text-xs text-gray-500">{{ $source->region->name ?? 'N/A' }} (BKPSDM)</p>
                                             </div>
                                         </div>
-                                        <div class="flex items-center space-x-3 text-sm">
-                                            <form action="{{ route('monitoring.sources.crawl_single', $source) }}" method="POST" x-data="{ submitting: false }" @submit="submitting = true" onsubmit="return confirm('Mulai crawling untuk situs {{ $source->name }}?')">
+                                        <div class="flex items-center space-x-4 text-sm">
+                                            <form action="{{ route('monitoring.sources.crawl_single', $source) }}" method="POST" x-data="{ submitting: false }" @submit="submitting = true">
                                                 @csrf
-                                                <button type="submit" 
-                                                        :disabled="submitting"
-                                                        class="text-green-600 hover:text-green-900 disabled:opacity-50 disabled:cursor-not-allowed">
-                                                    <span x-show="!submitting">Crawl Sekarang</span>
-                                                    <span x-show="submitting">Memproses...</span>
-                                                </button>
+                                                <button type="submit" :disabled="submitting" class="text-green-600 hover:text-green-900 disabled:opacity-50">Crawl</button>
                                             </form>
                                             <a href="{{ route('monitoring.sources.edit', $source) }}" class="text-indigo-600 hover:text-indigo-900">Edit</a>
+                                            <form action="{{ route('monitoring.sources.destroy', $source) }}" method="POST" onsubmit="return confirm('Apakah Anda yakin ingin menghapus situs {{ addslashes($source->name) }}?')">
+                                                @csrf
+                                                @method('DELETE')
+                                                <button type="submit" class="text-red-600 hover:text-red-900">Hapus</button>
+                                            </form>
                                         </div>
                                     </div>
                                     @endforeach
