@@ -19,6 +19,7 @@ class Tracker extends Model
         'keywords',
         'description',
         'status',
+        'search_mode',
     ];
 
     /**

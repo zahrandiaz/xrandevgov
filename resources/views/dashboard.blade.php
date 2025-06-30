@@ -83,7 +83,16 @@
 
             @if($problematicSources->isNotEmpty())
                 <div>
-                    <h3 class="text-lg font-semibold text-red-800 mb-3">Situs Bermasalah (Gagal >= 3x)</h3>
+                    {{-- [MODIFIKASI v1.27.1] Judul sekarang ada di dalam flexbox dengan tombol --}}
+                    <div class="flex justify-between items-center mb-3">
+                        <h3 class="text-lg font-semibold text-red-800">Situs Bermasalah (Gagal >= 1)</h3>
+                        <form action="{{ route('monitoring.reset_failures') }}" method="POST" onsubmit="return confirm('Apakah Anda yakin ingin mereset status kegagalan untuk SEMUA situs?')">
+                            @csrf
+                            <button type="submit" class="text-xs bg-gray-200 text-gray-700 hover:bg-gray-300 font-semibold py-1 px-3 rounded-full">
+                                Reset Semua Status
+                            </button>
+                        </form>
+                    </div>
                     <div class="bg-red-50 border-l-4 border-red-400 p-4">
                         <ul class="text-sm text-gray-700 space-y-2">
                             @foreach($problematicSources as $source)

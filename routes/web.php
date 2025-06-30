@@ -57,6 +57,9 @@ Route::middleware('access.code')->group(function () {
     // Rute untuk daftar artikel
     Route::get('/monitoring/articles', [MonitoringSourceController::class, 'listArticles'])->name('monitoring.articles.index');
     Route::delete('/monitoring/articles/{article}', [MonitoringSourceController::class, 'destroyArticle'])->name('monitoring.articles.destroy');
+    
+    // [BARU v1.27.1] Rute untuk mereset kegagalan crawl dari Dashboard
+    Route::post('/monitoring/reset-failures', [MonitoringSourceController::class, 'resetFailures'])->name('monitoring.reset_failures');
 
     // Rute untuk manajemen data master
     Route::resource('selector-presets', SelectorPresetController::class)->except(['show']);

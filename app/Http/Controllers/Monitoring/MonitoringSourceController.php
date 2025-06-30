@@ -15,6 +15,7 @@ use App\Services\SelectorSuggestionService;
 use App\Services\ExperimentalSuggestionService; // [BARU v1.22] Impor service baru
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use Illuminate\Support\Facades\DB;
 
 class MonitoringSourceController extends Controller
 {
@@ -315,7 +316,7 @@ class MonitoringSourceController extends Controller
         $totalCrawled = $activeCrawledSources->count();
         $successfulCrawls = $activeCrawledSources->clone()->where('last_crawl_status', 'success')->count();
         $crawlSuccessRate = ($totalCrawled > 0) ? round(($successfulCrawls / $totalCrawled) * 100) : 100;
-        $problematicSources = MonitoringSource::where('consecutive_failures', '>=', 3)
+        $problematicSources = MonitoringSource::where('consecutive_failures', '>=', 1)
                                               ->orderBy('consecutive_failures', 'desc')
                                               ->get();
         
@@ -326,5 +327,19 @@ class MonitoringSourceController extends Controller
             'newArticlesToday', 'newArticlesLast7Days', 'latestCrawls',
             'crawlSuccessRate', 'problematicSources', 'systemActivities'
         ));
+    }
+
+    // [BARU v1.27.1] Metode untuk mereset status kegagalan dari UI
+    public function resetFailures()
+    {
+        $updatedCount = DB::table('monitoring_sources')->update([
+            'consecutive_failures' => 0,
+            'last_crawl_status' => null // Kita set null agar tidak lagi dianggap 'failed'
+        ]);
+
+        log_activity("Status kegagalan untuk {$updatedCount} situs telah direset dari Dashboard.", 'info', 'system-utility');
+
+        return redirect()->route('dashboard')
+                         ->with('notify', ['success', "Berhasil! Status kegagalan untuk {$updatedCount} situs telah direset."]);
     }
 }

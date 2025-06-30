@@ -32,6 +32,25 @@
                 <input type="text" id="keywords" name="keywords" value="{{ old('keywords') }}" required class="block w-full mt-1 border-gray-300 rounded-md shadow-sm" placeholder="Contoh: pppk, guru, kelulusan, hasil akhir">
                 <p class="mt-1 text-xs text-gray-500">Kata kunci ini akan digunakan untuk mencari artikel yang relevan.</p>
             </div>
+            
+            {{-- [BARU v1.27.1] TAMBAHKAN BLOK DI BAWAH INI --}}
+            <div>
+                <label class="block font-medium text-sm text-gray-700">Mode Pencarian</label>
+                <div class="mt-2 space-y-2">
+                    <label class="inline-flex items-center">
+                        <input type="radio" class="form-radio" name="search_mode" value="OR" @checked(old('search_mode', 'OR') == 'OR')>
+                        <span class="ml-2">Mode ATAU (OR)</span>
+                    </label>
+                    <p class="text-xs text-gray-500 ml-6">Menemukan artikel jika mengandung **SALAH SATU** dari kata kunci. (Hasil lebih luas)</p>
+                    <label class="inline-flex items-center">
+                        <input type="radio" class="form-radio" name="search_mode" value="AND" @checked(old('search_mode') == 'AND')>
+                        <span class="ml-2">Mode DAN (AND)</span>
+                    </label>
+                    <p class="text-xs text-gray-500 ml-6">Menemukan artikel jika mengandung **SEMUA** kata kunci. (Hasil lebih spesifik)</p>
+                </div>
+            </div>
+            {{-- AKHIR BLOK BARU --}}
+
             <div>
                 <label for="description" class="block font-medium text-sm text-gray-700">Deskripsi (Opsional)</label>
                 <textarea id="description" name="description" rows="3" class="block w-full mt-1 border-gray-300 rounded-md shadow-sm">{{ old('description') }}</textarea>

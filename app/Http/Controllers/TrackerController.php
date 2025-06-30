@@ -31,9 +31,11 @@ class TrackerController extends Controller
      */
     public function store(Request $request)
     {
+        // [MODIFIKASI v1.27.1] Menambahkan validasi untuk search_mode
         $validatedData = $request->validate([
             'title' => 'required|string|max:255|unique:trackers,title',
             'keywords' => 'required|string|max:255',
+            'search_mode' => 'required|in:OR,AND', // Validasi baru
             'description' => 'nullable|string',
             'status' => 'required|in:Aktif,Arsip',
         ], [
@@ -43,8 +45,7 @@ class TrackerController extends Controller
         ]);
 
         $tracker = Tracker::create($validatedData);
-        
-        // Catat aktivitas ke log sistem
+
         log_activity("Pantauan baru '{$tracker->title}' telah dibuat.", 'success', 'tracker-management');
 
         return redirect()->route('trackers.index')
@@ -56,38 +57,37 @@ class TrackerController extends Controller
      */
     public function show(Tracker $tracker)
     {
-        // 1. Ambil semua wilayah provinsi dengan relasi anak (kab/kota) dan sumber monitoringnya
         $provinces = Region::where('type', 'Provinsi')
-            ->with([
-                'children', // kab/kota
-                'monitoringSources.region', // sumber BKD di level provinsi
-                'children.monitoringSources.region', // sumber BKPSDM di level kab/kota
-            ])
+            ->with(['children', 'monitoringSources.region', 'children.monitoringSources.region'])
             ->orderBy('name', 'asc')
             ->get();
 
-        // 2. Ambil semua ID sumber monitoring yang ada
         $allSourceIds = $provinces->flatMap(function ($province) {
             $sourceIds = $province->monitoringSources->pluck('id');
-            $childSourceIds = $province->children->flatMap(function ($kabkota) {
-                return $kabkota->monitoringSources->pluck('id');
-            });
+            $childSourceIds = $province->children->flatMap(fn($kabkota) => $kabkota->monitoringSources->pluck('id'));
             return $sourceIds->merge($childSourceIds);
         })->unique();
 
-        // 3. Bangun query untuk mencari artikel yang relevan
+        // [REWORK v1.27.1] Logika pencarian diperbarui untuk mode AND/OR dan Whole Word
         $relevantArticlesQuery = CrawledArticle::whereIn('monitoring_source_id', $allSourceIds)
             ->where(function ($query) use ($tracker) {
-                foreach ($tracker->keywords as $keyword) {
-                    $query->orWhere('title', 'LIKE', '%' . $keyword . '%');
+                if ($tracker->search_mode === 'AND') {
+                    // Mode AND: Semua kata kunci harus ada
+                    foreach ($tracker->keywords as $keyword) {
+                        // Menggunakan REGEXP untuk pencarian "whole word"
+                        $query->where('title', 'REGEXP', '[[:<:]]' . preg_quote($keyword) . '[[:>:]]');
+                    }
+                } else {
+                    // Mode OR: Cukup salah satu kata kunci ada
+                    foreach ($tracker->keywords as $keyword) {
+                        $query->orWhere('title', 'REGEXP', '[[:<:]]' . preg_quote($keyword) . '[[:>:]]');
+                    }
                 }
             })
             ->select('monitoring_source_id', 'url', 'title')
-            // Ambil hanya artikel terbaru per sumber yang cocok
-            ->groupBy('monitoring_source_id', 'url', 'title') 
+            ->groupBy('monitoring_source_id', 'url', 'title')
             ->orderBy('published_date', 'desc');
 
-        // Eksekusi query dan kelompokkan berdasarkan monitoring_source_id
         $foundArticles = $relevantArticlesQuery->get()->keyBy('monitoring_source_id');
         
         $totalSources = $allSourceIds->count();
@@ -116,9 +116,11 @@ class TrackerController extends Controller
      */
     public function update(Request $request, Tracker $tracker)
     {
+        // [MODIFIKASI v1.27.1] Menambahkan validasi untuk search_mode
         $validatedData = $request->validate([
             'title' => 'required|string|max:255|unique:trackers,title,' . $tracker->id,
             'keywords' => 'required|string|max:255',
+            'search_mode' => 'required|in:OR,AND', // Validasi baru
             'description' => 'nullable|string',
             'status' => 'required|in:Aktif,Arsip',
         ]);
