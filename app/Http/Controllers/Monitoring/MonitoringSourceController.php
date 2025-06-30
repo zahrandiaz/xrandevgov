@@ -135,6 +135,57 @@ class MonitoringSourceController extends Controller
         return redirect()->route('monitoring.sources.index')
                          ->with('success', 'Situs monitoring berhasil dihapus!');
     }
+
+    /**
+     * [BARU v1.28.0] Menangani aksi massal dari halaman manajemen situs.
+     */
+    public function handleBulkActions(Request $request)
+    {
+        try {
+            $validated = $request->validate([
+                'action' => ['required', Rule::in(['activate', 'deactivate', 'crawl', 'delete'])],
+                'source_ids' => 'required|array|min:1',
+                'source_ids.*' => 'exists:monitoring_sources,id',
+            ]);
+
+            $action = $validated['action'];
+            $sourceIds = $validated['source_ids'];
+            $count = count($sourceIds);
+
+            switch ($action) {
+                case 'activate':
+                    MonitoringSource::whereIn('id', $sourceIds)->update(['is_active' => true]);
+                    $message = "Berhasil mengaktifkan crawl untuk {$count} situs.";
+                    break;
+                
+                case 'deactivate':
+                    MonitoringSource::whereIn('id', $sourceIds)->update(['is_active' => false]);
+                    $message = "Berhasil menonaktifkan crawl untuk {$count} situs.";
+                    break;
+
+                case 'crawl':
+                    $sources = MonitoringSource::find($sourceIds);
+                    foreach ($sources as $source) {
+                        CrawlSourceJob::dispatch($source);
+                    }
+                    $message = "Berhasil mengirimkan job crawling untuk {$count} situs.";
+                    break;
+
+                case 'delete':
+                    MonitoringSource::destroy($sourceIds);
+                    $message = "Berhasil menghapus {$count} situs.";
+                    break;
+            }
+
+            return redirect()->route('monitoring.sources.index')->with('notify', ['success', $message]);
+
+        } catch (ValidationException $e) {
+            return redirect()->route('monitoring.sources.index')->with('notify', ['error', 'Aksi massal gagal: ' . $e->getMessage()]);
+        } catch (\Exception $e) {
+            Log::error('Bulk action failed: ' . $e->getMessage());
+            return redirect()->route('monitoring.sources.index')->with('notify', ['error', 'Terjadi kesalahan internal saat melakukan aksi massal.']);
+        }
+    }
     
     public function suggestSelectorsAjax(
         Request $request,

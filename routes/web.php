@@ -42,6 +42,8 @@ Route::middleware('access.code')->group(function () {
     Route::get('/monitoring/sources/{source}/edit', [MonitoringSourceController::class, 'edit'])->name('monitoring.sources.edit');
     Route::patch('/monitoring/sources/{source}', [MonitoringSourceController::class, 'update'])->name('monitoring.sources.update');
     Route::delete('/monitoring/sources/{source}', [MonitoringSourceController::class, 'destroy'])->name('monitoring.sources.destroy');
+    // [BARU v1.28.0] Rute untuk menangani Aksi Massal
+    Route::post('/monitoring/sources/bulk-action', [MonitoringSourceController::class, 'handleBulkActions'])->name('monitoring.sources.bulk_action');
 
     // Rute untuk proses crawling
     Route::post('/monitoring/sources/crawl', [MonitoringSourceController::class, 'crawl'])->name('monitoring.sources.crawl');
