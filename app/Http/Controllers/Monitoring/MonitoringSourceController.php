@@ -65,6 +65,8 @@ class MonitoringSourceController extends Controller
         if (empty($validatedData['crawl_url'])) { $validatedData['crawl_url'] = '/'; }
         
         $validatedData['is_active'] = $request->has('is_active');
+        // [FIX v1.29.0] Logika dibalik. `expects_date` adalah kebalikan dari status checkbox.
+        $validatedData['expects_date'] = !$request->has('no_date_mode');
 
         MonitoringSource::create($validatedData);
 
@@ -88,12 +90,16 @@ class MonitoringSourceController extends Controller
         if (empty($validatedData['crawl_url'])) { $validatedData['crawl_url'] = '/'; }
         
         $validatedData['is_active'] = $request->has('is_active');
+        // [FIX v1.29.0] Logika dibalik. `expects_date` adalah kebalikan dari status checkbox.
+        // Jika checkbox 'no_date_mode' dicentang (ada di request), maka expects_date harus false.
+        $validatedData['expects_date'] = !$request->has('no_date_mode');
+        
         $source->update($validatedData);
 
         return redirect()->route('monitoring.sources.index')->with('success', 'Situs monitoring berhasil diperbarui!');
     }
     
-    // [BARU v1.26.0] Helper untuk sentralisasi validasi
+    // [FIX v1.29.0] Helper validasi diperbarui untuk menggunakan nama baru
     private function validateSourceData(Request $request, $sourceId = null)
     {
         $urlRule = 'required|url:http,https';
@@ -124,6 +130,7 @@ class MonitoringSourceController extends Controller
             'selector_date' => 'nullable|string',
             'selector_link' => 'nullable|string',
             'is_active' => 'nullable|boolean',
+            'no_date_mode' => 'nullable|boolean', // Validasi untuk checkbox dengan nama baru
             'suggestion_engine' => ['nullable', 'string', Rule::in(['Manual', 'Kamus', 'Stabil v3', 'Eksperimental v4'])],
             'site_status' => ['required', 'string', Rule::in(['Aktif', 'URL Tidak Valid', 'Tanpa Halaman Berita', 'Lainnya'])],
         ]);
@@ -136,9 +143,6 @@ class MonitoringSourceController extends Controller
                          ->with('success', 'Situs monitoring berhasil dihapus!');
     }
 
-    /**
-     * [BARU v1.28.0] Menangani aksi massal dari halaman manajemen situs.
-     */
     public function handleBulkActions(Request $request)
     {
         try {

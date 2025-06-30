@@ -15,7 +15,11 @@ class CrawlerService
     public function __construct()
     {
         date_default_timezone_set('Asia/Jakarta');
-        $this->httpClient = HttpClient::create(['verify_peer' => false, 'verify_host' => false]);
+        $this->httpClient = HttpClient::create([
+            'timeout' => 60, 
+            'verify_peer' => false, 
+            'verify_host' => false
+        ]);
     }
 
     public function fetchHtmlAsCrawler(string $baseUrl, string $crawlUrlPath): Crawler
@@ -47,7 +51,15 @@ class CrawlerService
             $date = null;
 
             if ($dateSelector) {
-                $container = $titleNode->closest('article, .post, .item, li, div, tr');
+                // [FIX FINAL v1.29.0] Sinkronkan logika ini dengan ExperimentalSuggestionService v4.12
+                $container = $titleNode->closest('article, .post, .media, .item-list, .blog-item');
+                if (!$container || $container->count() === 0) {
+                    $parent = $titleNode->ancestors()->first();
+                    if ($parent && $parent->count() > 0) {
+                        $container = $parent->ancestors()->first();
+                    }
+                }
+
                 if ($container && $container->count() > 0) {
                     $dateNode = $container->filter($dateSelector)->first();
                     if ($dateNode->count() > 0) {
@@ -83,36 +95,26 @@ class CrawlerService
             $parsedDate = $this->parseDateFromText($node->attr('datetime'));
             if ($parsedDate) return $parsedDate;
         }
-
+        
         $nodeText = $node->text();
         if (!empty(trim($nodeText))) {
             $parsedDate = $this->parseDateFromText($nodeText);
             if ($parsedDate) return $parsedDate;
         }
 
-        $childText = $node->filter('*')->each(function(Crawler $child) { return $child->text(); });
-        if(!empty($childText)) {
-            $parsedDate = $this->parseDateFromText(implode(' ', $childText));
-            if ($parsedDate) return $parsedDate;
-        }
-
         return null;
     }
 
-    /**
-     * [REWORK v1.24] Mesin parsing tanggal diperkuat untuk mengenali format "ago".
-     */
     private function parseDateFromText(?string $text): ?string
     {
         if (empty(trim($text))) {
             return null;
         }
 
-        // [MODIFIKASI v1.24] Regex utama untuk *mengekstrak* tanggal, kini mengenali 'ago'.
         $dateExtractionPattern = '/'.
             '(\d{1,2}\s+(?:Januari|Februari|Maret|April|Mei|Juni|Juli|Agustus|September|Oktober|November|Desember|Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{4})|'.
-            '(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4})|'.
-            '(kemarin|hari\s*ini|\d+\s*(?:jam|menit|detik|second|minute|hour)s?\s*(?:yang\s*lalu|ago))'.
+            '(\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{4})|'.
+            '(kemarin|hari\s*ini|\d+\s*(?:jam|menit|detik|second|minute|hour)s?\s*(?:yang\s*)?lalu|ago)'.
         '/i';
 
         $dateStringToParse = $text;
@@ -126,7 +128,7 @@ class CrawlerService
             '',
             $dateStringToParse
         );
-        $cleanedText = trim($cleanedText);
+        $cleanedText = trim(preg_replace('/\s+/', ' ', $cleanedText));
 
         $translations = [
             'januari' => 'january', 'februari' => 'february', 'maret' => 'march', 'april' => 'april',
@@ -136,7 +138,11 @@ class CrawlerService
             'jul' => 'jul', 'agu' => 'aug', 'sep' => 'sep', 'okt' => 'oct', 'nov' => 'nov', 'des' => 'dec',
             'hari ini' => 'today', 'kemarin' => 'yesterday',
             'jam' => 'hours', 'menit' => 'minutes', 'detik' => 'seconds',
-            'yang lalu' => 'ago', 'second' => 'second', 'minute' => 'minute', 'hour' => 'hour',
+            'yang lalu' => 'ago', 
+            'lalu' => 'ago',
+            'second' => 'second', 'seconds' => 'seconds',
+            'minute' => 'minute', 'minutes' => 'minutes',
+            'hour' => 'hour', 'hours' => 'hours',
         ];
         
         $englishText = str_ireplace(array_keys($translations), array_values($translations), strtolower($cleanedText));

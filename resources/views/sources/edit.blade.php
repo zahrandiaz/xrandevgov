@@ -86,10 +86,16 @@
                             <option value="Lainnya" @selected(old('site_status', $source->site_status) == 'Lainnya')>Lainnya</option>
                         </select>
                     </div>
-                     <div class="md:col-span-2">
+                    <div class="md:col-span-2 space-y-4">
                         <label for="is_active" class="flex items-center">
                             <input type="checkbox" id="is_active" name="is_active" value="1" @checked(old('is_active', $source->is_active))>
                             <span class="ms-2 text-sm text-gray-600">Situs Aktif (akan di-crawl)</span>
+                        </label>
+                        
+                        {{-- [FIX v1.29.0] Logika checkbox diperbaiki --}}
+                        <label for="no_date_mode" class="flex items-center">
+                            <input type="checkbox" id="no_date_mode" name="no_date_mode" value="1" @checked(!old('expects_date', $source->expects_date))>
+                            <span class="ms-2 text-sm text-gray-600">Situs ini **tidak** memiliki informasi tanggal (Aktifkan Mode Tanpa Tanggal)</span>
                         </label>
                     </div>
                 </div>
@@ -223,7 +229,6 @@
                         selectorTitleInput.value = data.title_selectors[0] || '';
                         selectorDateInput.value = data.date_selectors[0] || '';
                         
-                        // Mengisi hidden input dengan nama engine
                         if (data.engine) {
                             document.getElementById('suggestionEngineInput').value = data.engine;
                         }

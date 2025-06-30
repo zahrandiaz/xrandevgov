@@ -3,20 +3,17 @@
 @section('title', 'Manajemen Situs Monitoring')
 
 @section('content')
-{{-- [MODIFIKASI v1.28.0] Tambahkan wrapper Alpine.js untuk mengelola state --}}
 <div x-data="{ 
         selectedSources: [],
         toggleAll(event, ids) {
             if (event.target.checked) {
-                // Tambahkan semua ID yang belum ada ke dalam array
                 this.selectedSources = [...new Set([...this.selectedSources, ...ids])];
             } else {
-                // Hapus semua ID dari array
                 this.selectedSources = this.selectedSources.filter(id => !ids.includes(id));
             }
         },
         isAllSelected(ids) {
-            if (ids.length === 0) return false; // Jangan tandai jika tidak ada situs
+            if (ids.length === 0) return false;
             return ids.every(id => this.selectedSources.includes(id));
         },
         submitBulkAction(action) {
@@ -31,7 +28,6 @@
             let form = document.getElementById('bulkActionForm');
             form.querySelector('input[name=action]').value = action;
             
-            // Hapus input lama dan buat yang baru untuk memastikan data bersih
             form.querySelectorAll('input[name^=source_ids]').forEach(el => el.remove());
             this.selectedSources.forEach(id => {
                 let input = document.createElement('input');
@@ -44,26 +40,18 @@
         }
      }">
 
-    {{-- [BARU v1.28.0] Form tersembunyi untuk Aksi Massal --}}
     <form id="bulkActionForm" method="POST" action="{{ route('monitoring.sources.bulk_action') }}" class="hidden">
         @csrf
         <input type="hidden" name="action" value="">
-        {{-- Input untuk source_ids akan ditambahkan oleh JavaScript --}}
     </form>
 
-    {{-- [BARU v1.28.0] Panel Aksi Massal yang melayang --}}
     <div x-show="selectedSources.length > 0" 
-         x-transition:enter="transition ease-out duration-300"
-         x-transition:enter-start="opacity-0 transform -translate-y-2"
-         x-transition:enter-end="opacity-100 transform translate-y-0"
-         x-transition:leave="transition ease-in duration-200"
-         x-transition:leave-start="opacity-100 transform translate-y-0"
-         x-transition:leave-end="opacity-0 transform -translate-y-2"
+         x-transition
          class="fixed bottom-4 right-4 z-50 bg-white shadow-lg rounded-lg p-4 border border-gray-200 flex items-center gap-4"
          style="display: none;">
         <span class="text-sm font-semibold text-gray-800" x-text="`${selectedSources.length} situs terpilih`"></span>
         <div class="flex items-center gap-2">
-             <button @click="submitBulkAction('activate')" class="px-3 py-1 text-xs font-medium text-white bg-green-600 rounded-md hover:bg-green-700">Aktifkan</button>
+            <button @click="submitBulkAction('activate')" class="px-3 py-1 text-xs font-medium text-white bg-green-600 rounded-md hover:bg-green-700">Aktifkan</button>
             <button @click="submitBulkAction('deactivate')" class="px-3 py-1 text-xs font-medium text-white bg-yellow-600 rounded-md hover:bg-yellow-700">Nonaktifkan</button>
             <button @click="submitBulkAction('crawl')" class="px-3 py-1 text-xs font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700">Crawl</button>
             <button @click="submitBulkAction('delete')" class="px-3 py-1 text-xs font-medium text-white bg-red-600 rounded-md hover:bg-red-700">Hapus</button>
@@ -78,9 +66,7 @@
             <div class="flex items-center space-x-4">
                 <form method="POST" action="{{ route('monitoring.sources.crawl') }}" x-data="{ submitting: false }" @submit="submitting = true">
                     @csrf
-                    <button type="submit" 
-                            :disabled="submitting"
-                            class="bg-purple-600 text-white py-2 px-4 rounded-md hover:bg-purple-700 focus:outline-none focus:ring focus:border-purple-300 disabled:opacity-50 disabled:cursor-not-allowed">
+                    <button type="submit" :disabled="submitting" class="bg-purple-600 text-white py-2 px-4 rounded-md hover:bg-purple-700 focus:outline-none focus:ring focus:border-purple-300 disabled:opacity-50 disabled:cursor-not-allowed">
                         <span x-show="!submitting">Crawl Semua Situs Aktif</span>
                         <span x-show="submitting">Mengirim Jobs...</span>
                     </button>
@@ -90,8 +76,6 @@
                 </a>
             </div>
         </div>
-
-        {{-- Notifikasi lama tidak diperlukan lagi karena sudah ditangani oleh layout --}}
 
         @if($uncategorizedSources->isNotEmpty())
         <div class="mb-6">
@@ -156,15 +140,11 @@
                     </div>
 
                     <div x-show="open" x-transition class="border-t border-gray-200 p-4 space-y-3">
-                        @if($province->total_sites_count === 0)
-                            <p class="text-sm text-gray-500">Tidak ada situs monitoring di provinsi ini.</p>
-                        @endif
-                        
                         @php
                             $allSources = $province->monitoringSources->merge($province->children->flatMap->monitoringSources)->sortBy('name');
                         @endphp
 
-                        @foreach($allSources as $source)
+                        @forelse($allSources as $source)
                             <div class="flex items-center justify-between p-3 {{ $source->tipe_instansi === 'BKD' ? 'bg-blue-50' : 'bg-gray-50' }} rounded-md">
                                 <div class="flex items-center space-x-3">
                                     <input type="checkbox" :value="{{ $source->id }}" x-model="selectedSources" class="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500">
@@ -187,6 +167,13 @@
                                             @if($source->suggestion_engine)
                                             <span class="px-1.5 py-0.5 text-xs font-medium rounded-md bg-indigo-100 text-indigo-800">{{ $source->suggestion_engine }}</span>
                                             @endif
+                                            
+                                            {{-- [BARU v1.29.0] Badge untuk Mode Tanpa Tanggal --}}
+                                            @if(!$source->expects_date)
+                                                <span class="px-1.5 py-0.5 text-xs font-medium rounded-md bg-yellow-200 text-yellow-800 border border-yellow-300" title="Situs ini dikonfigurasi untuk tidak memiliki tanggal.">
+                                                    Tanpa Tanggal
+                                                </span>
+                                            @endif
                                         </div>
                                     </div>
                                 </div>
@@ -206,7 +193,9 @@
                                     </form>
                                 </div>
                             </div>
-                        @endforeach
+                        @empty
+                            <p class="text-sm text-gray-500">Tidak ada situs monitoring untuk provinsi ini.</p>
+                        @endforelse
                     </div>
                 </div>
             @empty
